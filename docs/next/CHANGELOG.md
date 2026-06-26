@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+### Added
+- Added a `last_tab` keybinding (default `prefix+a`) that switches back to the previously active tab within the workspace, toggling between the two like tmux's last-window. Each workspace tracks its own previous tab.
+
 ## [0.7.3] - 2026-07-08
 
 ### Fixed

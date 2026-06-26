@@ -1102,10 +1102,19 @@ impl AppState {
             let Some(ws) = self.workspaces.get_mut(ws_idx) else {
                 return;
             };
+            let previous_tab_number = ws.active_tab().map(|tab| tab.number);
+            let previous_active = ws.active_tab;
             ws.switch_tab(idx);
+            let tab_changed = ws.active_tab != previous_active;
             let workspace_id = ws.id.clone();
             let tab_id = public_tab_id_for_index(ws, idx).unwrap_or_else(|| workspace_id.clone());
             crate::logging::tab_focused(&workspace_id, &tab_id);
+            if tab_changed {
+                if let Some(number) = previous_tab_number {
+                    self.previous_tab_by_workspace
+                        .insert(workspace_id.clone(), number);
+                }
+            }
             self.mark_session_dirty();
             self.tab_scroll_follow_active = true;
             self.refresh_tab_bar_view();
@@ -1684,6 +1693,31 @@ impl AppState {
             tab.layout.focus_pane(target.pane_id);
             self.previous_pane_focus = current;
             self.mark_session_dirty();
+        }
+    }
+
+    /// Switch back to the previously active tab within the current workspace.
+    /// Mirrors `last_pane` but scoped per workspace; each workspace remembers its
+    /// own prior tab by stable number, so this toggles between two tabs.
+    pub fn last_tab(&mut self) {
+        let Some(ws_idx) = self.active else {
+            return;
+        };
+        let Some(ws) = self.workspaces.get(ws_idx) else {
+            return;
+        };
+        let ws_id = ws.id.clone();
+        let Some(&target_number) = self.previous_tab_by_workspace.get(&ws_id) else {
+            return;
+        };
+        let resolved = ws.tabs.iter().position(|tab| tab.number == target_number);
+        let active = ws.active_tab;
+        match resolved {
+            Some(target_idx) if target_idx != active => self.switch_tab(target_idx),
+            Some(_) => {}
+            None => {
+                self.previous_tab_by_workspace.remove(&ws_id);
+            }
         }
     }
 
@@ -3997,6 +4031,71 @@ mod tests {
         assert_eq!(state.workspaces[1].active_tab, second_tab);
         assert_eq!(state.workspaces[1].focused_pane_id(), Some(second_tab_root));
         assert_ne!(second_first_root, second_tab_root);
+    }
+
+    #[test]
+    fn last_tab_toggles_between_two_tabs() {
+        let mut state = app_with_workspaces(&["test"]);
+        let second = state.workspaces[0].test_add_tab(Some("logs"));
+
+        state.switch_tab(second);
+        assert_eq!(state.workspaces[0].active_tab, second);
+
+        state.last_tab();
+        assert_eq!(state.workspaces[0].active_tab, 0);
+
+        state.last_tab();
+        assert_eq!(state.workspaces[0].active_tab, second);
+    }
+
+    #[test]
+    fn last_tab_without_history_is_noop() {
+        let mut state = app_with_workspaces(&["test"]);
+        let _second = state.workspaces[0].test_add_tab(Some("logs"));
+
+        state.last_tab();
+
+        assert_eq!(state.workspaces[0].active_tab, 0);
+    }
+
+    #[test]
+    fn last_tab_is_scoped_per_workspace() {
+        let mut state = app_with_workspaces(&["one", "two"]);
+        let one_second = state.workspaces[0].test_add_tab(Some("a"));
+        let two_second = state.workspaces[1].test_add_tab(Some("b"));
+
+        // Build tab history independently in each workspace.
+        state.switch_tab(one_second);
+        state.switch_workspace(1);
+        state.switch_tab(two_second);
+
+        // last_tab uses the active workspace's own history.
+        state.last_tab();
+        assert_eq!(state.active, Some(1));
+        assert_eq!(state.workspaces[1].active_tab, 0);
+
+        // Workspace one's history is untouched by workspace two.
+        state.switch_workspace(0);
+        state.last_tab();
+        assert_eq!(state.workspaces[0].active_tab, 0);
+    }
+
+    #[test]
+    fn last_tab_ignores_removed_previous_tab() {
+        let mut state = app_with_workspaces(&["test"]);
+        let second = state.workspaces[0].test_add_tab(Some("logs"));
+        let third = state.workspaces[0].test_add_tab(Some("more"));
+
+        // Record `third` as the previous tab, then move on to `second`.
+        state.switch_tab(third);
+        state.switch_tab(second);
+        state.workspaces[0].close_tab(third);
+
+        let active_before = state.workspaces[0].active_tab;
+        state.last_tab();
+
+        // The recorded previous tab no longer exists, so nothing moves.
+        assert_eq!(state.workspaces[0].active_tab, active_before);
     }
 
     #[test]

@@ -1341,6 +1341,12 @@ mod tests {
         assert!(workspace_tab
             .iter()
             .any(|(key, label)| key == "unset" && label.as_ref() == "switch workspace 1-9"));
+        assert!(
+            workspace_tab
+                .iter()
+                .any(|(_, label)| label.as_ref() == "last tab"),
+            "last tab action should be surfaced in the keybind help dialog"
+        );
         assert!(panes
             .iter()
             .any(|(key, label)| key == "prefix+h" && label.as_ref() == "focus pane left"));

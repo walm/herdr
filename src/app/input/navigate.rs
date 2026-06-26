@@ -1282,6 +1282,7 @@ pub(crate) enum NavigateAction {
     CyclePaneNext,
     CyclePanePrevious,
     LastPane,
+    LastTab,
     Help,
     Settings,
     ReloadConfig,
@@ -1388,6 +1389,7 @@ fn action_for_key(
         (&kb.rename_tab, NavigateAction::RenameTab),
         (&kb.previous_tab, NavigateAction::PreviousTab),
         (&kb.next_tab, NavigateAction::NextTab),
+        (&kb.last_tab, NavigateAction::LastTab),
         (&kb.close_tab, NavigateAction::CloseTab),
         (&kb.rename_pane, NavigateAction::RenamePane),
         (&kb.edit_scrollback, NavigateAction::EditScrollback),
@@ -1628,6 +1630,10 @@ pub(super) fn execute_navigate_action_in_context(
         }
         NavigateAction::LastPane => {
             state.last_pane();
+            leave_navigate_mode(state);
+        }
+        NavigateAction::LastTab => {
+            state.last_tab();
             leave_navigate_mode(state);
         }
         NavigateAction::Help => super::modal::open_keybind_help(state),
