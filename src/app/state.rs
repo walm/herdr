@@ -1300,6 +1300,9 @@ pub struct AppState {
     pub workspaces: Vec<Workspace>,
     pub active: Option<usize>,
     pub(crate) previous_pane_focus: Option<PaneFocusTarget>,
+    /// Per-workspace previous active tab, keyed by workspace id and stored by
+    /// stable tab number so it survives tab close/reorder. Drives `last_tab`.
+    pub(crate) previous_tab_by_workspace: std::collections::HashMap<String, usize>,
     pub selected: usize,
     pub mode: Mode,
     pub should_quit: bool,
@@ -1658,6 +1661,7 @@ impl AppState {
             workspaces: Vec::new(),
             active: None,
             previous_pane_focus: None,
+            previous_tab_by_workspace: std::collections::HashMap::new(),
             selected: 0,
             mode: Mode::Navigate,
             should_quit: false,

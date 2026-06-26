@@ -507,6 +507,7 @@ impl App {
             workspaces,
             active,
             previous_pane_focus: None,
+            previous_tab_by_workspace: std::collections::HashMap::new(),
             selected,
             mode,
             should_quit: false,
