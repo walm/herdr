@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+### Added
+- Added a `last_tab` keybinding (default `prefix+a`) that switches back to the previously active tab within the workspace, toggling between the two like tmux's last-window. Each workspace tracks its own previous tab.
+
 ### Fixed
 - Native Windows clients running inside Alacritty now preserve mouse reports and `ctrl+j` input instead of leaking mouse escape sequences into panes. `shift+enter` remains dependent on whether the outer terminal reports it as a distinct modified Enter key. (#792)
 

@@ -312,6 +312,7 @@ pub struct Keybinds {
     pub rename_tab: ActionKeybinds,
     pub previous_tab: ActionKeybinds,
     pub next_tab: ActionKeybinds,
+    pub last_tab: ActionKeybinds,
     pub switch_tab: Vec<IndexedKeybind>,
     pub switch_workspace: Vec<IndexedKeybind>,
     pub close_tab: ActionKeybinds,
@@ -474,6 +475,7 @@ impl Config {
             rename_tab: empty_action!(),
             previous_tab: empty_action!(),
             next_tab: empty_action!(),
+            last_tab: empty_action!(),
             switch_tab: Vec::new(),
             switch_workspace: Vec::new(),
             close_tab: empty_action!(),
@@ -605,6 +607,7 @@ impl Config {
             apply_action!(keybinds.rename_tab, rename_tab, source);
             apply_action!(keybinds.previous_tab, previous_tab, source);
             apply_action!(keybinds.next_tab, next_tab, source);
+            apply_action!(keybinds.last_tab, last_tab, source);
             apply_indexed!(
                 keybinds.switch_tab,
                 switch_tab,
@@ -1539,6 +1542,37 @@ next_tab = "prefix+n"
     fn back_and_forth_keybinds_are_unset_by_default() {
         let kb = Config::default().keybinds();
         assert!(kb.last_pane.bindings.is_empty());
+    }
+
+    #[test]
+    fn last_tab_defaults_to_prefix_a() {
+        let kb = Config::default().keybinds();
+        assert_eq!(
+            binding_triggers(&kb.last_tab),
+            vec![BindingTrigger::Prefix((
+                KeyCode::Char('a'),
+                KeyModifiers::empty()
+            ))]
+        );
+    }
+
+    #[test]
+    fn last_tab_can_be_overridden_in_config() {
+        let config: Config = toml::from_str(
+            r#"
+[keys]
+last_tab = "prefix+y"
+"#,
+        )
+        .unwrap();
+        let kb = config.keybinds();
+        assert_eq!(
+            binding_triggers(&kb.last_tab),
+            vec![BindingTrigger::Prefix((
+                KeyCode::Char('y'),
+                KeyModifiers::empty()
+            ))]
+        );
     }
 
     #[test]
