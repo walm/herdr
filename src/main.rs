@@ -296,6 +296,10 @@ const DEFAULT_CONFIG: &str = r##"# herdr configuration
 # New tabs can still be created with the configured keybinding.
 # hide_tab_bar_when_single_tab = false
 
+# Show the prefix hint bar at the bottom of the screen after pressing the prefix key.
+# Set false to hide it; prefix mode still works.
+# show_prefix_hint = true
+
 # Agent panel ordering: "spaces" (grouped by space) or "priority" (attention queue).
 # "workspaces" is accepted as an alias for "spaces".
 # agent_panel_sort = "spaces"
