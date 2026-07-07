@@ -787,6 +787,8 @@ pub struct UiConfig {
     pub pane_gaps: bool,
     /// Show agent labels in split pane borders when no manual pane label is set. Default: false.
     pub show_agent_labels_on_pane_borders: bool,
+    /// Show the prefix hint bar at the bottom of the screen while in prefix mode. Default: true.
+    pub show_prefix_hint: bool,
     /// Agent sidebar ordering. Saved values are "spaces" or "priority". Default: "spaces".
     pub agent_panel_sort: AgentPanelSortConfig,
     /// Accent color for highlights, borders, and navigation UI.
@@ -978,6 +980,7 @@ impl Default for UiConfig {
             pane_borders: true,
             pane_gaps: true,
             show_agent_labels_on_pane_borders: false,
+            show_prefix_hint: true,
             agent_panel_sort: AgentPanelSortConfig::Spaces,
             accent: "cyan".into(),
             toast: ToastConfig::default(),
@@ -1226,6 +1229,19 @@ prompt_new_tab_name = false
 "#;
         let config: Config = toml::from_str(toml).unwrap();
         assert!(!config.ui.prompt_new_tab_name);
+    }
+
+    #[test]
+    fn show_prefix_hint_defaults_on_and_parses() {
+        let default_config = Config::default();
+        assert!(default_config.ui.show_prefix_hint);
+
+        let toml = r#"
+[ui]
+show_prefix_hint = false
+"#;
+        let config: Config = toml::from_str(toml).unwrap();
+        assert!(!config.ui.show_prefix_hint);
     }
 
     #[test]
