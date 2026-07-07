@@ -5,6 +5,7 @@
 ### Added
 - Added a `last_tab` keybinding (default `prefix+a`) that switches back to the previously active tab within the workspace, toggling between the two like tmux's last-window. Each workspace tracks its own previous tab.
 - Added `ui.show_prefix_hint` (default true) to toggle the prefix hint bar shown at the bottom of the screen after pressing the prefix key. Set it to false to hide the hint while keeping prefix mode working.
+- You can now bind an action to the prefix key itself (prefix+prefix), for example `last_tab = "prefix+ctrl+b"` when the prefix is `ctrl+b`. This overrides the default tmux-style send-prefix on a double-tap; leave it unbound to keep sending a literal prefix to the focused pane.
 
 ### Fixed
 - Native Windows clients running inside Alacritty now preserve mouse reports and `ctrl+j` input instead of leaking mouse escape sequences into panes. `shift+enter` remains dependent on whether the outer terminal reports it as a distinct modified Enter key. (#792)

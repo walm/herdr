@@ -975,8 +975,15 @@ fn reject_binding(
     diagnostics: &mut Vec<String>,
     source: BindingSource,
 ) -> bool {
-    if binding.trigger.is_prefix() && registry.prefix_rhs_is_reserved(binding.trigger.combo()) {
-        if source == BindingSource::Default && registry.prefix_source == BindingSource::User {
+    if binding.trigger.is_prefix()
+        && registry.prefix_rhs_is_reserved(binding.trigger.combo())
+        && source != BindingSource::User
+    {
+        // A user binding to the prefix key (prefix+prefix) is an explicit opt-in that
+        // overrides the default tmux-style send-a-literal-prefix behavior, so those fall
+        // through to normal registration. Default bindings that collide with the prefix
+        // key stay disabled: silently when the user changed the prefix, otherwise reported.
+        if registry.prefix_source == BindingSource::User {
             return true;
         }
         let diag = format!(
@@ -1717,7 +1724,9 @@ close_tab = "X"
     }
 
     #[test]
-    fn prefix_rhs_equal_to_configured_prefix_is_rejected() {
+    fn prefix_rhs_equal_to_configured_prefix_overrides_send_prefix() {
+        // A user binding whose prefix-mode key equals the prefix (prefix+prefix) is an
+        // explicit opt-in: it is honored and overrides the default send-prefix behavior.
         let config: Config = toml::from_str(
             r#"
 [keys]
@@ -1727,13 +1736,12 @@ help = "prefix+ctrl+a"
         )
         .unwrap();
         let diagnostics = config.collect_diagnostics();
-        assert!(config.keybinds().help.bindings.is_empty());
-        assert!(diagnostics.iter().any(|diag| {
-            diag.contains("reserved keybinding")
-                && diag.contains("keys.help")
-                && diag.contains("keys.prefix")
-        }));
+        assert!(!config.keybinds().help.bindings.is_empty());
+        assert!(!diagnostics
+            .iter()
+            .any(|diag| diag.contains("reserved keybinding")));
 
+        // A different prefix-mode key is unaffected and kept as normal.
         let config: Config = toml::from_str(
             r#"
 [keys]
@@ -1874,7 +1882,7 @@ navigate_workspace_down = "ctrl+a"
     }
 
     #[test]
-    fn custom_command_prefix_rhs_equal_to_configured_prefix_is_rejected() {
+    fn custom_command_can_override_prefix_prefix() {
         let config: Config = toml::from_str(
             r#"
 [keys]
@@ -1882,15 +1890,41 @@ prefix = "ctrl+b"
 
 [[keys.command]]
 key = "prefix+ctrl+b"
-command = "echo no"
+command = "echo yes"
 "#,
         )
         .unwrap();
         let diagnostics = config.collect_diagnostics();
-        assert!(config.keybinds().custom_commands.is_empty());
-        assert!(diagnostics.iter().any(|diag| {
-            diag.contains("reserved keybinding") && diag.contains("keys.command[0].key")
-        }));
+        // Explicitly binding the prefix key (prefix+prefix) is a user opt-in that
+        // overrides send-prefix, so the command is kept and not reported as reserved.
+        assert_eq!(config.keybinds().custom_commands.len(), 1);
+        assert!(!diagnostics
+            .iter()
+            .any(|diag| diag.contains("reserved keybinding")));
+    }
+
+    #[test]
+    fn user_can_bind_action_to_prefix_prefix() {
+        let config: Config = toml::from_str(
+            r#"
+[keys]
+prefix = "ctrl+b"
+last_tab = "prefix+ctrl+b"
+"#,
+        )
+        .unwrap();
+        let kb = config.keybinds();
+        let diagnostics = config.collect_diagnostics();
+        assert_eq!(
+            binding_triggers(&kb.last_tab),
+            vec![BindingTrigger::Prefix((
+                KeyCode::Char('b'),
+                KeyModifiers::CONTROL
+            ))]
+        );
+        assert!(!diagnostics
+            .iter()
+            .any(|diag| diag.contains("reserved keybinding")));
     }
 
     #[test]
