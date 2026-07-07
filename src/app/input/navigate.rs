@@ -46,16 +46,6 @@ impl App {
         let key = raw_key.as_key_event();
         self.state.update_dismissed = true;
 
-        if self.state.is_prefix_key(raw_key) {
-            if self.state.copy_mode_pane_is_focused() {
-                self.state.cancel_copy_mode(&self.terminal_runtimes);
-            }
-            if !self.pass_through_key_to_focused_pane(raw_key) {
-                leave_command_mode(&mut self.state);
-            }
-            return;
-        }
-
         if key.code == KeyCode::Esc {
             leave_command_mode(&mut self.state);
             return;
@@ -86,6 +76,19 @@ impl App {
         if let Some(binding) = command_for_key(&self.state, raw_key, BindingDispatch::Prefix) {
             self.cancel_copy_mode_if_active();
             self.launch_custom_command(binding, ActionContext::Prefix);
+            return;
+        }
+
+        // The prefix key with no prefix+prefix binding of its own: send a literal prefix
+        // keystroke to the focused pane (tmux-style send-prefix). Reached only after the
+        // action/command lookups above so a user's explicit prefix+prefix binding wins.
+        if self.state.is_prefix_key(raw_key) {
+            if self.state.copy_mode_pane_is_focused() {
+                self.state.cancel_copy_mode(&self.terminal_runtimes);
+            }
+            if !self.pass_through_key_to_focused_pane(raw_key) {
+                leave_command_mode(&mut self.state);
+            }
             return;
         }
 
@@ -2605,6 +2608,59 @@ navigate_pane_down = "ctrl+j"
         ))
         .await;
         app.handle_key(TerminalKey::new(KeyCode::F(12), KeyModifiers::empty()))
+            .await;
+
+        assert_eq!(app.state.mode, Mode::Terminal);
+    }
+
+    #[tokio::test]
+    async fn prefix_prefix_binding_fires_action_instead_of_send_prefix() {
+        let (_api_tx, api_rx) = tokio::sync::mpsc::unbounded_channel();
+        let mut app = App::new(
+            &Config::default(),
+            true,
+            None,
+            api_rx,
+            crate::api::EventHub::default(),
+        );
+        app.state.workspaces = vec![Workspace::test_new("test")];
+        app.state.active = Some(0);
+        app.state.selected = 0;
+        app.state.mode = Mode::Terminal;
+        let second = app.state.workspaces[0].test_add_tab(Some("logs"));
+        app.state.switch_tab(second);
+        // Bind the prefix key itself (prefix+prefix) to an action.
+        app.state.keybinds.last_tab = crate::config::ActionKeybinds::prefix("ctrl+b");
+
+        app.handle_key(TerminalKey::new(app.state.prefix_code, app.state.prefix_mods))
+            .await;
+        app.handle_key(TerminalKey::new(app.state.prefix_code, app.state.prefix_mods))
+            .await;
+
+        // The bound action ran instead of send-prefix, toggling back to the first tab.
+        assert_eq!(app.state.workspaces[0].active_tab, 0);
+    }
+
+    #[tokio::test]
+    async fn prefix_prefix_without_binding_falls_back_to_send_prefix() {
+        let (_api_tx, api_rx) = tokio::sync::mpsc::unbounded_channel();
+        let mut app = App::new(
+            &Config::default(),
+            true,
+            None,
+            api_rx,
+            crate::api::EventHub::default(),
+        );
+        app.state.workspaces = vec![Workspace::test_new("test")];
+        app.state.active = Some(0);
+        app.state.selected = 0;
+        app.state.mode = Mode::Terminal;
+
+        app.handle_key(TerminalKey::new(app.state.prefix_code, app.state.prefix_mods))
+            .await;
+        // Nothing binds prefix+prefix, so the second press takes the send-prefix fallback;
+        // with no focused runtime to receive it, that path leaves prefix mode.
+        app.handle_key(TerminalKey::new(app.state.prefix_code, app.state.prefix_mods))
             .await;
 
         assert_eq!(app.state.mode, Mode::Terminal);
