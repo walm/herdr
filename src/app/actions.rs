@@ -1710,10 +1710,17 @@ impl AppState {
         let Some(&target_number) = self.previous_tab_by_workspace.get(&ws_id) else {
             return;
         };
-        let resolved = ws.tabs.iter().position(|tab| tab.number == target_number);
         let active = ws.active_tab;
+        let current_number = ws.tabs.get(active).map(|tab| tab.number);
+        let resolved = ws.tabs.iter().position(|tab| tab.number == target_number);
         match resolved {
-            Some(target_idx) if target_idx != active => self.switch_tab(target_idx),
+            Some(target_idx) if target_idx != active => {
+                self.switch_workspace_tab(ws_idx, target_idx);
+                // Record the tab we came from so a second press toggles back.
+                if let Some(number) = current_number {
+                    self.previous_tab_by_workspace.insert(ws_id, number);
+                }
+            }
             Some(_) => {}
             None => {
                 self.previous_tab_by_workspace.remove(&ws_id);
