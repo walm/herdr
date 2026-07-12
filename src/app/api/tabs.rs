@@ -131,6 +131,18 @@ impl App {
         let Some((ws_idx, tab_idx)) = self.parse_tab_id(&target.tab_id) else {
             return tab_not_found(id, &target.tab_id);
         };
+        // Record the tab we're leaving (by stable number) so `last_tab` can toggle
+        // back to it. This is the runtime chokepoint for next/previous/indexed tab
+        // focus, so it must live here rather than only in AppState::switch_tab.
+        let previous = self
+            .state
+            .workspaces
+            .get(ws_idx)
+            .filter(|ws| ws.active_tab != tab_idx)
+            .and_then(|ws| ws.tabs.get(ws.active_tab).map(|tab| (ws.id.clone(), tab.number)));
+        if let Some((ws_id, number)) = previous {
+            self.state.previous_tab_by_workspace.insert(ws_id, number);
+        }
         self.state.switch_workspace_tab(ws_idx, tab_idx);
         let tab = self.tab_info(ws_idx, tab_idx).unwrap();
 

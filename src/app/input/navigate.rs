@@ -2672,6 +2672,39 @@ navigate_pane_down = "ctrl+j"
     }
 
     #[tokio::test]
+    async fn last_tab_toggles_after_runtime_tab_switch() {
+        let (_api_tx, api_rx) = tokio::sync::mpsc::unbounded_channel();
+        let mut app = App::new(
+            &Config::default(),
+            true,
+            None,
+            api_rx,
+            crate::api::EventHub::default(),
+        );
+        app.state.workspaces = vec![Workspace::test_new("test")];
+        app.state.active = Some(0);
+        app.state.selected = 0;
+        app.state.mode = Mode::Terminal;
+        let second = app.state.workspaces[0].test_add_tab(Some("logs"));
+        assert_eq!(app.state.workspaces[0].active_tab, 0);
+
+        // Switch to the second tab through the real runtime path (prefix + next_tab),
+        // which goes through the tab-focus API rather than AppState::switch_tab.
+        app.handle_key(TerminalKey::new(app.state.prefix_code, app.state.prefix_mods))
+            .await;
+        app.handle_key(TerminalKey::new(KeyCode::Char('n'), KeyModifiers::empty()))
+            .await;
+        assert_eq!(app.state.workspaces[0].active_tab, second);
+
+        // last_tab (prefix + a) must toggle back to the first tab.
+        app.handle_key(TerminalKey::new(app.state.prefix_code, app.state.prefix_mods))
+            .await;
+        app.handle_key(TerminalKey::new(KeyCode::Char('a'), KeyModifiers::empty()))
+            .await;
+        assert_eq!(app.state.workspaces[0].active_tab, 0);
+    }
+
+    #[tokio::test]
     async fn prefix_help_matches_enhanced_shifted_question_mark() {
         let (_api_tx, api_rx) = tokio::sync::mpsc::unbounded_channel();
         let mut app = App::new(
