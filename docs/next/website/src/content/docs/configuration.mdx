@@ -321,6 +321,7 @@ pane_gaps = true
 show_agent_labels_on_pane_borders = false
 hide_tab_bar_when_single_tab = false
 show_prefix_hint = true
+tab_number_prefix = false
 agent_panel_sort = "spaces"
 accent = "cyan"
 ```
@@ -352,6 +353,8 @@ Set `show_agent_labels_on_pane_borders = true` if you want detected agent labels
 Set `hide_tab_bar_when_single_tab = true` to hide the tab row when the active workspace has exactly one tab. New tabs can still be created with the configured keybinding. When a second tab appears, Herdr restores the tab row and resizes panes to make room for it.
 
 Set `show_prefix_hint = false` to hide the prefix hint bar that appears at the bottom of the screen after you press the prefix key. Prefix mode still works; only the hint is hidden.
+
+Set `tab_number_prefix = true` to prefix each tab label in the tab bar with its position number, for example `1: main`. This makes the `prefix+1..9` switch keys easy to read on named tabs. Unnamed tabs already display their number, so they are left unchanged.
 
 ## Notifications
 

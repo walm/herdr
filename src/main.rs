@@ -300,6 +300,10 @@ const DEFAULT_CONFIG: &str = r##"# herdr configuration
 # Set false to hide it; prefix mode still works.
 # show_prefix_hint = true
 
+# Prefix each tab label in the tab bar with its position number (e.g. "1: main").
+# Unnamed tabs already show their number and are left as-is.
+# tab_number_prefix = false
+
 # Agent panel ordering: "spaces" (grouped by space) or "priority" (attention queue).
 # "workspaces" is accepted as an alias for "spaces".
 # agent_panel_sort = "spaces"
