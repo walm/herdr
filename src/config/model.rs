@@ -814,6 +814,8 @@ pub struct UiConfig {
     pub hide_tab_bar_when_single_tab: bool,
     /// Show the prefix hint bar at the bottom of the screen while in prefix mode. Default: true.
     pub show_prefix_hint: bool,
+    /// Prefix each tab label in the tab bar with its position number. Default: false.
+    pub tab_number_prefix: bool,
     /// Agent sidebar ordering. Saved values are "spaces" or "priority". Default: "spaces".
     pub agent_panel_sort: AgentPanelSortConfig,
     /// Accent color for highlights, borders, and navigation UI.
@@ -1009,6 +1011,7 @@ impl Default for UiConfig {
             show_agent_labels_on_pane_borders: false,
             hide_tab_bar_when_single_tab: false,
             show_prefix_hint: true,
+            tab_number_prefix: false,
             agent_panel_sort: AgentPanelSortConfig::Spaces,
             accent: "cyan".into(),
             toast: ToastConfig::default(),
@@ -1273,6 +1276,19 @@ show_prefix_hint = false
 "#;
         let config: Config = toml::from_str(toml).unwrap();
         assert!(!config.ui.show_prefix_hint);
+    }
+
+    #[test]
+    fn tab_number_prefix_defaults_off_and_parses() {
+        let default_config = Config::default();
+        assert!(!default_config.ui.tab_number_prefix);
+
+        let toml = r#"
+[ui]
+tab_number_prefix = true
+"#;
+        let config: Config = toml::from_str(toml).unwrap();
+        assert!(config.ui.tab_number_prefix);
     }
 
     #[test]
