@@ -2669,10 +2669,16 @@ navigate_pane_down = "ctrl+j"
         // Bind the prefix key itself (prefix+prefix) to an action.
         app.state.keybinds.last_tab = crate::config::ActionKeybinds::prefix("ctrl+b");
 
-        app.handle_key(TerminalKey::new(app.state.prefix_code, app.state.prefix_mods))
-            .await;
-        app.handle_key(TerminalKey::new(app.state.prefix_code, app.state.prefix_mods))
-            .await;
+        app.handle_key(TerminalKey::new(
+            app.state.prefix_code,
+            app.state.prefix_mods,
+        ))
+        .await;
+        app.handle_key(TerminalKey::new(
+            app.state.prefix_code,
+            app.state.prefix_mods,
+        ))
+        .await;
 
         // The bound action ran instead of send-prefix, toggling back to the first tab.
         assert_eq!(app.state.workspaces[0].active_tab, 0);
@@ -2693,12 +2699,18 @@ navigate_pane_down = "ctrl+j"
         app.state.selected = 0;
         app.state.mode = Mode::Terminal;
 
-        app.handle_key(TerminalKey::new(app.state.prefix_code, app.state.prefix_mods))
-            .await;
+        app.handle_key(TerminalKey::new(
+            app.state.prefix_code,
+            app.state.prefix_mods,
+        ))
+        .await;
         // Nothing binds prefix+prefix, so the second press takes the send-prefix fallback;
         // with no focused runtime to receive it, that path leaves prefix mode.
-        app.handle_key(TerminalKey::new(app.state.prefix_code, app.state.prefix_mods))
-            .await;
+        app.handle_key(TerminalKey::new(
+            app.state.prefix_code,
+            app.state.prefix_mods,
+        ))
+        .await;
 
         assert_eq!(app.state.mode, Mode::Terminal);
     }
@@ -2722,15 +2734,21 @@ navigate_pane_down = "ctrl+j"
 
         // Switch to the second tab through the real runtime path (prefix + next_tab),
         // which goes through the tab-focus API rather than AppState::switch_tab.
-        app.handle_key(TerminalKey::new(app.state.prefix_code, app.state.prefix_mods))
-            .await;
+        app.handle_key(TerminalKey::new(
+            app.state.prefix_code,
+            app.state.prefix_mods,
+        ))
+        .await;
         app.handle_key(TerminalKey::new(KeyCode::Char('n'), KeyModifiers::empty()))
             .await;
         assert_eq!(app.state.workspaces[0].active_tab, second);
 
         // last_tab (prefix + a) must toggle back to the first tab.
-        app.handle_key(TerminalKey::new(app.state.prefix_code, app.state.prefix_mods))
-            .await;
+        app.handle_key(TerminalKey::new(
+            app.state.prefix_code,
+            app.state.prefix_mods,
+        ))
+        .await;
         app.handle_key(TerminalKey::new(KeyCode::Char('a'), KeyModifiers::empty()))
             .await;
         assert_eq!(app.state.workspaces[0].active_tab, 0);
