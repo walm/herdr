@@ -839,6 +839,9 @@ pub struct UiConfig {
     pub show_prefix_hint: bool,
     /// Prefix each tab label in the tab bar with its position number. Default: false.
     pub tab_number_prefix: bool,
+    /// Show each tab's aggregate agent status (working spinner, blocked, done) at
+    /// the end of the tab in the tab bar. Default: false.
+    pub tab_agent_status: bool,
     /// Agent sidebar ordering. Saved values are "spaces" or "priority". Default: "spaces".
     pub agent_panel_sort: AgentPanelSortConfig,
     /// Agent sidebar scope. "current" shows only agents in the active workspace,
@@ -1039,6 +1042,7 @@ impl Default for UiConfig {
             hide_tab_bar_when_single_tab: false,
             show_prefix_hint: true,
             tab_number_prefix: false,
+            tab_agent_status: false,
             agent_panel_sort: AgentPanelSortConfig::Spaces,
             agent_panel_scope: AgentPanelScopeConfig::All,
             accent: "cyan".into(),
@@ -1323,6 +1327,19 @@ tab_number_prefix = true
 "#;
         let config: Config = toml::from_str(toml).unwrap();
         assert!(config.ui.tab_number_prefix);
+    }
+
+    #[test]
+    fn tab_agent_status_defaults_off_and_parses() {
+        let default_config = Config::default();
+        assert!(!default_config.ui.tab_agent_status);
+
+        let toml = r#"
+[ui]
+tab_agent_status = true
+"#;
+        let config: Config = toml::from_str(toml).unwrap();
+        assert!(config.ui.tab_agent_status);
     }
 
     #[test]

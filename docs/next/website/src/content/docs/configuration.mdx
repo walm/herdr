@@ -325,6 +325,7 @@ show_agent_labels_on_pane_borders = false
 hide_tab_bar_when_single_tab = false
 show_prefix_hint = true
 tab_number_prefix = false
+tab_agent_status = false
 agent_panel_sort = "spaces"
 agent_panel_scope = "all"
 accent = "cyan"
@@ -361,6 +362,8 @@ Set `hide_tab_bar_when_single_tab = true` to hide the tab row when the active wo
 Set `show_prefix_hint = false` to hide the prefix hint bar that appears at the bottom of the screen after you press the prefix key. Prefix mode still works; only the hint is hidden.
 
 Set `tab_number_prefix = true` to prefix each tab label in the tab bar with its position number, for example `1: main`. This makes the `prefix+1..9` switch keys easy to read on named tabs. Unnamed tabs already display their number, so they are left unchanged.
+
+Set `tab_agent_status = true` to show each tab's aggregate agent status at the end of the tab in the tab bar, using the same glyphs as the sidebar: an animated spinner for working, a red dot for blocked, and a teal dot for done. Quiet tabs (idle or without an agent) show nothing. When a tab has several agents, the highest-attention one wins (blocked, then done, then working). This makes it easy to see which tabs need attention when switching workspaces.
 
 ## Notifications
 
