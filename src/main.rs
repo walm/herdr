@@ -309,6 +309,10 @@ const DEFAULT_CONFIG: &str = r##"# herdr configuration
 # "workspaces" is accepted as an alias for "spaces".
 # agent_panel_sort = "spaces"
 
+# Agent panel scope: "all" shows agents across all workspaces, "current" shows
+# only agents in the active workspace (follows the workspace you switch to).
+# agent_panel_scope = "all"
+
 # Accent color for highlights, borders, and navigation UI.
 # Accepts: hex (#89b4fa), named colors (cyan, blue, magenta), or rgb(r,g,b)
 # accent = "cyan"

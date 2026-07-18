@@ -326,6 +326,7 @@ hide_tab_bar_when_single_tab = false
 show_prefix_hint = true
 tab_number_prefix = false
 agent_panel_sort = "spaces"
+agent_panel_scope = "all"
 accent = "cyan"
 ```
 
@@ -336,6 +337,8 @@ accent = "cyan"
 `mobile_width_threshold` controls the terminal width at or below which Herdr uses the mobile single-column layout. The default is 64 columns; increase it for foldables, tablets, or wide phone terminals.
 
 The agent panel shows all agents across all spaces. `agent_panel_sort` can be `spaces` or `priority`; `workspaces` is accepted as an alias for `spaces`. `spaces` is the default and keeps agents grouped by space order. `priority` sorts by attention priority: blocked, done, working, idle, then unknown. Within the same status, agents that most recently changed state appear first.
+
+`agent_panel_scope` controls which agents the panel lists. `all` (default) shows agents across every workspace. `current` shows only agents in the active workspace, so the list follows the workspace you switch to (and the highlighted workspace while you browse the sidebar). Click the scope label in the panel header to toggle it, or set it here. It is independent of `agent_panel_sort`.
 
 `confirm_close` controls whether closing a workspace asks for confirmation. `prompt_new_tab_name` controls whether new tabs ask for a label first.
 
