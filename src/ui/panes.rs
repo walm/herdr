@@ -680,7 +680,17 @@ fn terminal_theme_to_rgb(color: crate::terminal_theme::RgbColor) -> Rgb {
     (color.r, color.g, color.b)
 }
 
-fn selection_fg_for_bg(bg: Color, p: &Palette) -> Color {
+/// Pick a readable black/white foreground for an arbitrary background color.
+/// Uses the WCAG black-vs-white crossover (~0.179 relative luminance), so light
+/// pastel backgrounds correctly get dark text.
+pub(super) fn readable_text_color(bg: Color) -> Color {
+    match color_to_rgb(bg) {
+        Some(rgb) if relative_luminance(rgb) > 0.179 => Color::Black,
+        _ => Color::White,
+    }
+}
+
+pub(super) fn selection_fg_for_bg(bg: Color, p: &Palette) -> Color {
     color_to_rgb(bg)
         .map(|bg| {
             if relative_luminance(bg) < 0.5 {
@@ -788,6 +798,19 @@ mod tests {
     use crate::terminal::TerminalRuntime;
     use crate::terminal::TerminalState;
     use crate::workspace::Workspace;
+
+    #[test]
+    fn readable_text_color_uses_dark_text_on_light_pastels() {
+        // Catppuccin pastel accents are light → dark text (the 0.5 threshold got
+        // this wrong and produced unreadable white text).
+        assert_eq!(readable_text_color(Color::Rgb(203, 166, 247)), Color::Black); // mauve
+        assert_eq!(readable_text_color(Color::Rgb(243, 139, 168)), Color::Black); // red
+        assert_eq!(readable_text_color(Color::Rgb(137, 180, 250)), Color::Black); // blue
+        assert_eq!(readable_text_color(Color::Rgb(249, 226, 175)), Color::Black); // yellow
+                                                                                  // Genuinely dark backgrounds → white text.
+        assert_eq!(readable_text_color(Color::Rgb(30, 30, 46)), Color::White); // base
+        assert_eq!(readable_text_color(Color::Rgb(210, 15, 57)), Color::White); // latte red
+    }
 
     #[test]
     fn pane_border_title_trims_and_truncates() {

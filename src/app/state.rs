@@ -93,6 +93,20 @@ pub struct Palette {
 }
 
 impl Palette {
+    /// Resolve a user-chosen workspace color to a concrete theme color.
+    pub fn workspace_color(&self, color: crate::workspace::WorkspaceColor) -> Color {
+        use crate::workspace::WorkspaceColor;
+        match color {
+            WorkspaceColor::Mauve => self.mauve,
+            WorkspaceColor::Red => self.red,
+            WorkspaceColor::Peach => self.peach,
+            WorkspaceColor::Yellow => self.yellow,
+            WorkspaceColor::Green => self.green,
+            WorkspaceColor::Teal => self.teal,
+            WorkspaceColor::Blue => self.blue,
+        }
+    }
+
     /// Catppuccin Mocha — the default.
     pub fn catppuccin() -> Self {
         Self {
@@ -873,6 +887,14 @@ pub enum AgentPanelScope {
     AllWorkspaces,
 }
 
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub enum WorkspaceTabLabel {
+    #[default]
+    Auto,
+    On,
+    Off,
+}
+
 // ---------------------------------------------------------------------------
 // Settings UI state
 // ---------------------------------------------------------------------------
@@ -1112,6 +1134,10 @@ pub enum ContextMenuKind {
         source_pane_id: Option<PaneId>,
         has_manual_label: bool,
     },
+    /// Color-picker submenu for a workspace's tab-bar label.
+    WorkspaceColor {
+        ws_idx: usize,
+    },
 }
 
 /// Right-click context menu state.
@@ -1125,7 +1151,10 @@ pub struct ContextMenuState {
 impl ContextMenuState {
     pub fn items(&self) -> &'static [&'static str] {
         match self.kind {
-            ContextMenuKind::Workspace { .. } => &["Rename", "Close"],
+            ContextMenuKind::Workspace { .. } => &["Rename", "Set color", "Close"],
+            ContextMenuKind::WorkspaceColor { .. } => &[
+                "none", "mauve", "red", "peach", "yellow", "green", "teal", "blue",
+            ],
             ContextMenuKind::GitWorkspace {
                 is_linked_worktree: false,
                 has_worktree_children: false,
@@ -1391,6 +1420,7 @@ pub struct AppState {
     pub sidebar_section_split: f32,
     pub agent_panel_sort: AgentPanelSort,
     pub agent_panel_scope: AgentPanelScope,
+    pub workspace_tab_label: WorkspaceTabLabel,
     pub next_agent_state_change_seq: u64,
     /// Capture mouse input for Herdr's own mouse UI. When false, Herdr only
     /// captures mouse while the focused pane app requests mouse reporting.
@@ -1756,6 +1786,7 @@ impl AppState {
             sidebar_section_split: 0.5,
             agent_panel_sort: AgentPanelSort::Spaces,
             agent_panel_scope: AgentPanelScope::AllWorkspaces,
+            workspace_tab_label: WorkspaceTabLabel::Auto,
             next_agent_state_change_seq: 0,
             mouse_capture: true,
             right_click_passthrough_modifiers: None,
@@ -2112,7 +2143,8 @@ impl AppState {
         if let Some(menu) = &self.context_menu {
             match menu.kind {
                 ContextMenuKind::Workspace { ws_idx }
-                | ContextMenuKind::GitWorkspace { ws_idx, .. } => {
+                | ContextMenuKind::GitWorkspace { ws_idx, .. }
+                | ContextMenuKind::WorkspaceColor { ws_idx } => {
                     assert_workspace_index(ws_idx, "context menu workspace")
                 }
                 ContextMenuKind::Tab { ws_idx, tab_idx } => {

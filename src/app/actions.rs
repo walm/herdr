@@ -1545,6 +1545,7 @@ impl AppState {
             self.tab_scroll_follow_active,
             self.mouse_capture,
             self.tab_number_prefix,
+            crate::ui::workspace_tab_label_width(self),
         );
         self.tab_scroll = layout.scroll;
         self.view.tab_hit_areas = layout.tab_hit_areas;

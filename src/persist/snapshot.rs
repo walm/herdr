@@ -52,6 +52,8 @@ pub struct WorkspaceSnapshot {
     pub id: Option<String>,
     #[serde(default)]
     pub custom_name: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub custom_color: Option<crate::workspace::WorkspaceColor>,
     pub identity_cwd: PathBuf,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub worktree_space: Option<crate::workspace::WorktreeSpaceMembership>,
@@ -154,6 +156,7 @@ impl From<LegacyWorkspaceSnapshot> for WorkspaceSnapshot {
         Self {
             id: None,
             custom_name: snap.custom_name,
+            custom_color: None,
             identity_cwd,
             worktree_space: None,
             public_pane_numbers: HashMap::new(),
@@ -285,6 +288,7 @@ fn capture_workspace(
     WorkspaceSnapshot {
         id: Some(ws.id.clone()),
         custom_name: ws.custom_name.clone(),
+        custom_color: ws.custom_color,
         identity_cwd: ws
             .resolved_identity_cwd_from(terminals, terminal_runtimes)
             .unwrap_or_else(|| ws.identity_cwd.clone()),
@@ -625,6 +629,7 @@ mod tests {
             workspaces: vec![WorkspaceSnapshot {
                 id: Some("wproj".to_string()),
                 custom_name: Some("pi-mono".to_string()),
+                custom_color: None,
                 identity_cwd: PathBuf::from("/home/can/Projects/herdr"),
                 worktree_space: None,
                 public_pane_numbers: HashMap::from([(0, 1), (1, 2)]),
@@ -1180,6 +1185,7 @@ mod tests {
             workspaces: vec![WorkspaceSnapshot {
                 id: Some("test-ws".to_string()),
                 custom_name: Some("fallback test".to_string()),
+                custom_color: None,
                 identity_cwd: PathBuf::from("/tmp"),
                 worktree_space: None,
                 public_pane_numbers: HashMap::new(),

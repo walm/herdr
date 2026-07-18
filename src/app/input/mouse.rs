@@ -2658,7 +2658,7 @@ mod tests {
             kind: ContextMenuKind::Workspace { ws_idx: 1 },
             x: 2,
             y: 2,
-            list: MenuListState::new(1),
+            list: MenuListState::new(2),
         });
         app.state.mode = Mode::ContextMenu;
         handle_context_menu_key(
@@ -2698,7 +2698,7 @@ mod tests {
             kind: ContextMenuKind::Workspace { ws_idx: 1 },
             x: 2,
             y: 2,
-            list: MenuListState::new(1),
+            list: MenuListState::new(2),
         });
         app.state.mode = Mode::ContextMenu;
 
@@ -2706,7 +2706,7 @@ mod tests {
         app.handle_mouse(mouse(
             MouseEventKind::Down(MouseButton::Left),
             menu.x + 2,
-            menu.y + 2,
+            menu.y + 3,
         ));
 
         assert_eq!(app.state.workspaces.len(), 1);

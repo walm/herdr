@@ -123,6 +123,15 @@ impl AgentPanelScopeConfig {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, Serialize, Default)]
+#[serde(rename_all = "lowercase")]
+pub enum WorkspaceTabLabelConfig {
+    #[default]
+    Auto,
+    On,
+    Off,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Deserialize, Serialize)]
 #[serde(rename_all = "lowercase")]
 pub enum HostCursorModeConfig {
@@ -847,6 +856,9 @@ pub struct UiConfig {
     /// Agent sidebar scope. "current" shows only agents in the active workspace,
     /// "all" shows agents across all workspaces. Default: "all".
     pub agent_panel_scope: AgentPanelScopeConfig,
+    /// Show the active workspace name at the right of the tab bar. "auto" shows it
+    /// only when the sidebar is collapsed, "on" always, "off" never. Default: "auto".
+    pub workspace_tab_label: WorkspaceTabLabelConfig,
     /// Accent color for highlights, borders, and navigation UI.
     /// Accepts hex (#89b4fa), named colors (cyan, blue), or RGB (rgb(137,180,250)).
     pub accent: String,
@@ -1045,6 +1057,7 @@ impl Default for UiConfig {
             tab_agent_status: false,
             agent_panel_sort: AgentPanelSortConfig::Spaces,
             agent_panel_scope: AgentPanelScopeConfig::All,
+            workspace_tab_label: WorkspaceTabLabelConfig::Auto,
             accent: "cyan".into(),
             toast: ToastConfig::default(),
             sound: SoundConfig::default(),
@@ -1340,6 +1353,21 @@ tab_agent_status = true
 "#;
         let config: Config = toml::from_str(toml).unwrap();
         assert!(config.ui.tab_agent_status);
+    }
+
+    #[test]
+    fn workspace_tab_label_defaults_auto_and_parses() {
+        assert_eq!(
+            Config::default().ui.workspace_tab_label,
+            WorkspaceTabLabelConfig::Auto
+        );
+
+        let toml = r#"
+[ui]
+workspace_tab_label = "on"
+"#;
+        let config: Config = toml::from_str(toml).unwrap();
+        assert_eq!(config.ui.workspace_tab_label, WorkspaceTabLabelConfig::On);
     }
 
     #[test]

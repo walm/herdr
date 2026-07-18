@@ -268,7 +268,23 @@ pub(super) fn render_context_menu(app: &AppState, frame: &mut Frame) {
     let items: Vec<ListItem> = menu
         .items()
         .iter()
-        .map(|item| ListItem::new(Line::from(*item)))
+        .map(|item| {
+            // In the workspace color picker, render each option in its own color.
+            if matches!(
+                menu.kind,
+                crate::app::state::ContextMenuKind::WorkspaceColor { .. }
+            ) {
+                let color = crate::workspace::WorkspaceColor::ALL
+                    .iter()
+                    .copied()
+                    .find(|c| c.as_str() == *item)
+                    .map(|c| app.palette.workspace_color(c))
+                    .unwrap_or(p.text);
+                ListItem::new(Line::from(Span::styled(*item, Style::default().fg(color))))
+            } else {
+                ListItem::new(Line::from(*item))
+            }
+        })
         .collect();
     let list = List::new(items)
         .style(Style::default().fg(p.text))

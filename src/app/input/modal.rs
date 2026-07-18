@@ -663,6 +663,32 @@ pub(crate) fn handle_confirm_close_key(state: &mut AppState, key: KeyEvent) {
     }
 }
 
+/// Replace the current context menu with the workspace color-picker submenu.
+fn open_workspace_color_menu(state: &mut AppState, ws_idx: usize, x: u16, y: u16) {
+    state.context_menu = Some(ContextMenuState {
+        kind: ContextMenuKind::WorkspaceColor { ws_idx },
+        x,
+        y,
+        list: MenuListState::new(0),
+    });
+    state.mode = Mode::ContextMenu;
+}
+
+/// Apply a chosen color (or "none" → clear) to a workspace and close the menu.
+fn apply_workspace_color(state: &mut AppState, ws_idx: usize, item: Option<&str>) {
+    let color = item.and_then(|name| {
+        crate::workspace::WorkspaceColor::ALL
+            .iter()
+            .copied()
+            .find(|c| c.as_str() == name)
+    });
+    if let Some(ws) = state.workspaces.get_mut(ws_idx) {
+        ws.set_custom_color(color);
+        state.mark_session_dirty();
+    }
+    leave_modal(state);
+}
+
 #[cfg(test)]
 pub(super) fn apply_context_menu_action(
     state: &mut AppState,
@@ -671,7 +697,14 @@ pub(super) fn apply_context_menu_action(
     idx: usize,
 ) {
     let item = menu.items().get(idx).copied();
+    let (menu_x, menu_y) = (menu.x, menu.y);
     match (menu.kind, item) {
+        (ContextMenuKind::Workspace { ws_idx }, Some("Set color")) => {
+            open_workspace_color_menu(state, ws_idx, menu_x, menu_y);
+        }
+        (ContextMenuKind::WorkspaceColor { ws_idx }, item) => {
+            apply_workspace_color(state, ws_idx, item);
+        }
         (ContextMenuKind::GitWorkspace { ws_idx, .. }, Some("New worktree")) => {
             state.request_new_linked_worktree = Some(ws_idx);
             leave_modal(state);
@@ -1086,7 +1119,14 @@ impl App {
 
     pub(crate) fn apply_context_menu_action_via_api(&mut self, menu: ContextMenuState, idx: usize) {
         let item = menu.items().get(idx).copied();
+        let (menu_x, menu_y) = (menu.x, menu.y);
         match (menu.kind, item) {
+            (ContextMenuKind::Workspace { ws_idx }, Some("Set color")) => {
+                open_workspace_color_menu(&mut self.state, ws_idx, menu_x, menu_y);
+            }
+            (ContextMenuKind::WorkspaceColor { ws_idx }, item) => {
+                apply_workspace_color(&mut self.state, ws_idx, item);
+            }
             (ContextMenuKind::GitWorkspace { ws_idx, .. }, Some("New worktree")) => {
                 self.state.request_new_linked_worktree = Some(ws_idx);
                 leave_modal(&mut self.state);
@@ -1925,6 +1965,46 @@ mod tests {
 
         assert!(state.workspaces.is_empty());
         assert_eq!(state.mode, Mode::Navigate);
+    }
+
+    #[test]
+    fn set_color_context_menu_picks_and_clears_workspace_color() {
+        let mut state = state_with_workspaces(&["main"]);
+        state.active = Some(0);
+        state.selected = 0;
+        let mut terminal_runtimes = crate::terminal::TerminalRuntimeRegistry::new();
+
+        // "Set color" is items()[1] of the workspace menu; it opens the color submenu.
+        let menu = ContextMenuState {
+            kind: ContextMenuKind::Workspace { ws_idx: 0 },
+            x: 2,
+            y: 3,
+            list: MenuListState::new(0),
+        };
+        apply_context_menu_action(&mut state, &mut terminal_runtimes, menu, 1);
+        assert!(matches!(
+            state.context_menu.as_ref().map(|m| &m.kind),
+            Some(ContextMenuKind::WorkspaceColor { ws_idx: 0 })
+        ));
+
+        // Color items are ["none", "mauve", "red", ...]; index 2 selects "red".
+        let menu = state.context_menu.take().unwrap();
+        apply_context_menu_action(&mut state, &mut terminal_runtimes, menu, 2);
+        assert_eq!(
+            state.workspaces[0].custom_color,
+            Some(crate::workspace::WorkspaceColor::Red)
+        );
+        assert!(state.context_menu.is_none());
+
+        // "none" (index 0) clears the color.
+        let menu = ContextMenuState {
+            kind: ContextMenuKind::WorkspaceColor { ws_idx: 0 },
+            x: 2,
+            y: 3,
+            list: MenuListState::new(0),
+        };
+        apply_context_menu_action(&mut state, &mut terminal_runtimes, menu, 0);
+        assert_eq!(state.workspaces[0].custom_color, None);
     }
 
     #[test]

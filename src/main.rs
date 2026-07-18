@@ -317,6 +317,11 @@ const DEFAULT_CONFIG: &str = r##"# herdr configuration
 # only agents in the active workspace (follows the workspace you switch to).
 # agent_panel_scope = "all"
 
+# Show the active workspace name at the right of the tab bar. "auto" shows it only
+# when the sidebar is collapsed, "on" always, "off" never. Right-click a workspace
+# in the sidebar and choose "Set color" to tint this label.
+# workspace_tab_label = "auto"
+
 # Accent color for highlights, borders, and navigation UI.
 # Accepts: hex (#89b4fa), named colors (cyan, blue, magenta), or rgb(r,g,b)
 # accent = "cyan"

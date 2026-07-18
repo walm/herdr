@@ -10,6 +10,7 @@
 - Added a `last_pane_in_tab` keybinding (unset by default) that toggles between the two most recently focused panes within the current tab, like tmux's `last-pane`. Each tab tracks its own previous pane and it never jumps to another tab or workspace (unlike the global `last_pane`).
 - Added `ui.agent_panel_scope` (default `all`) to scope the Agents sidebar panel to the current workspace. Set it to `current`, or click the scope label in the panel header, to show only agents in the active workspace; the list then follows the workspace you switch to.
 - Added `ui.tab_agent_status` (default false) to show each tab's aggregate agent status at the end of the tab in the tab bar — an animated spinner for working, plus blocked and done markers, reusing the sidebar glyphs. Quiet tabs show nothing, and the highest-attention agent wins when a tab has several.
+- Added `ui.workspace_tab_label` (`auto`/`on`/`off`, default `auto`) to show the active workspace name at the right of the tab bar — `auto` shows it while the sidebar is collapsed. You can tint the label per workspace via the sidebar right-click menu's new "Set color" picker (choose a theme color or "none"); the color is saved with the session.
 
 ## [0.7.3] - 2026-07-08
 
