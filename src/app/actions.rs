@@ -330,6 +330,12 @@ impl AppState {
             .get_mut(ws_idx)
             .and_then(|ws| ws.tabs.get_mut(tab_idx))
         {
+            // Record the pane we're leaving within this tab so `last_pane_in_tab`
+            // can toggle back to it. Scoped per tab, independent of global last_pane.
+            let prior = tab.layout.focused();
+            if prior != pane_id {
+                tab.previous_focused_pane = Some(prior);
+            }
             tab.layout.focus_pane(pane_id);
             self.previous_pane_focus = previous;
             self.mark_session_dirty();
@@ -1695,6 +1701,26 @@ impl AppState {
             self.previous_pane_focus = current;
             self.mark_session_dirty();
         }
+    }
+
+    #[cfg(test)]
+    pub fn last_pane_in_tab(&mut self) {
+        let Some(ws_idx) = self.active else {
+            return;
+        };
+        let Some(prev) = self
+            .workspaces
+            .get(ws_idx)
+            .and_then(|ws| ws.active_tab())
+            .and_then(|tab| {
+                let prev = tab.previous_focused_pane?;
+                (tab.layout.focused() != prev && tab.layout.pane_ids().contains(&prev))
+                    .then_some(prev)
+            })
+        else {
+            return;
+        };
+        self.focus_pane_in_workspace(ws_idx, prev);
     }
 
     /// Switch back to the previously active tab within the current workspace.
@@ -3940,6 +3966,51 @@ mod tests {
         state.last_pane();
 
         assert_eq!(state.workspaces[0].focused_pane_id(), Some(right));
+    }
+
+    #[test]
+    fn last_pane_in_tab_toggles_within_active_tab() {
+        let mut state = app_with_workspaces(&["test"]);
+        let root = state.workspaces[0].tabs[0].root_pane;
+        let right = state.workspaces[0].test_split(Direction::Horizontal);
+
+        state.focus_pane_in_workspace(0, root);
+        state.focus_pane_in_workspace(0, right);
+        state.last_pane_in_tab();
+
+        assert_eq!(state.workspaces[0].focused_pane_id(), Some(root));
+
+        state.last_pane_in_tab();
+
+        assert_eq!(state.workspaces[0].focused_pane_id(), Some(right));
+    }
+
+    #[test]
+    fn last_pane_in_tab_stays_within_current_tab() {
+        let mut state = app_with_workspaces(&["test"]);
+        // Tab 0 builds its own in-tab history (root -> right).
+        let tab0_root = state.workspaces[0].tabs[0].root_pane;
+        let tab0_right = state.workspaces[0].test_split(Direction::Horizontal);
+        state.focus_pane_in_workspace(0, tab0_root);
+        state.focus_pane_in_workspace(0, tab0_right);
+
+        // Tab 1 gets its own two panes and in-tab history (a -> b).
+        let tab1 = state.workspaces[0].test_add_tab(Some("logs"));
+        let tab1_a = state.workspaces[0].tabs[tab1].root_pane;
+        state.focus_pane_in_workspace(0, tab1_a);
+        let tab1_b = state.workspaces[0].test_split(Direction::Horizontal);
+        state.focus_pane_in_workspace(0, tab1_a);
+        state.focus_pane_in_workspace(0, tab1_b);
+
+        // last_pane_in_tab toggles inside tab 1 only; it never jumps to tab 0.
+        state.last_pane_in_tab();
+        assert_eq!(state.workspaces[0].active_tab, tab1);
+        assert_eq!(state.workspaces[0].focused_pane_id(), Some(tab1_a));
+        // Tab 0's own history is intact and independent.
+        assert_eq!(
+            state.workspaces[0].tabs[0].previous_focused_pane,
+            Some(tab0_root)
+        );
     }
 
     #[test]
