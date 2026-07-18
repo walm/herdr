@@ -624,6 +624,7 @@ impl App {
             hide_tab_bar_when_single_tab: config.ui.hide_tab_bar_when_single_tab,
             show_prefix_hint: config.ui.show_prefix_hint,
             tab_number_prefix: config.ui.tab_number_prefix,
+            tab_agent_status: config.ui.tab_agent_status,
             pane_history_persistence: config.experimental.pane_history,
             reveal_hidden_cursor_for_cjk_ime: config.experimental.reveal_hidden_cursor_for_cjk_ime,
             cjk_ime_agent_filter_configured: !config.experimental.cjk_ime_agents.is_empty(),
@@ -1400,6 +1401,7 @@ impl App {
                 self.state.hide_tab_bar_when_single_tab = config.ui.hide_tab_bar_when_single_tab;
                 self.state.show_prefix_hint = config.ui.show_prefix_hint;
                 self.state.tab_number_prefix = config.ui.tab_number_prefix;
+                self.state.tab_agent_status = config.ui.tab_agent_status;
                 self.state.agent_panel_sort =
                     agent_panel_sort_from_config(config.ui.agent_panel_sort);
                 self.state.agent_panel_scope =

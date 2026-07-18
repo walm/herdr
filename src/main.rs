@@ -305,6 +305,10 @@ const DEFAULT_CONFIG: &str = r##"# herdr configuration
 # Unnamed tabs already show their number and are left as-is.
 # tab_number_prefix = false
 
+# Show each tab's aggregate agent status at the end of the tab (working spinner,
+# blocked, done). Quiet tabs (idle or no agent) show nothing.
+# tab_agent_status = false
+
 # Agent panel ordering: "spaces" (grouped by space) or "priority" (attention queue).
 # "workspaces" is accepted as an alias for "spaces".
 # agent_panel_sort = "spaces"

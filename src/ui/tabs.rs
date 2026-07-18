@@ -5,9 +5,11 @@ use ratatui::{
     Frame,
 };
 
+use super::status::agent_icon;
 use super::text::display_width_u16;
 use super::widgets::panel_contrast_fg;
 use crate::app::AppState;
+use crate::detect::AgentState;
 
 const MIN_TAB_WIDTH: u16 = 8;
 const NEW_TAB_WIDTH: u16 = 3;
@@ -361,6 +363,27 @@ pub(super) fn render_tab_bar(app: &AppState, frame: &mut Frame, area: Rect) {
         let name = tab_chrome_label(ws, idx, app.tab_number_prefix);
         let text = format!(" {:width$}", name, width = width.saturating_sub(1));
         frame.render_widget(Paragraph::new(text).style(style), rect);
+
+        // Aggregate agent status glyph at the tab's trailing edge. Drawn into the
+        // existing trailing padding (no width change) so hit areas stay aligned;
+        // only shown for attention states (working / blocked / done).
+        if app.tab_agent_status {
+            let (state, seen) = tab.aggregate_state(&app.terminals);
+            let attention = matches!(
+                (state, seen),
+                (AgentState::Blocked, _) | (AgentState::Working, _) | (AgentState::Idle, false)
+            );
+            let name_width = display_width_u16(&name);
+            if attention && rect.width >= name_width.saturating_add(3) {
+                let (glyph, glyph_style) = agent_icon(state, seen, app.spinner_tick, p);
+                let glyph_bg = if active { p.accent } else { p.surface0 };
+                let glyph_rect = Rect::new(rect.x + rect.width - 2, rect.y, 1, 1);
+                frame.render_widget(
+                    Paragraph::new(glyph).style(glyph_style.bg(glyph_bg)),
+                    glyph_rect,
+                );
+            }
+        }
     }
 
     if let Some(crate::app::state::DragState {
@@ -464,6 +487,81 @@ mod tests {
             app.workspaces[0].tab_display_name(custom_tab).as_deref(),
             Some("test")
         );
+    }
+
+    fn tab_bar_row(app: &AppState) -> String {
+        let backend = TestBackend::new(30, 1);
+        let mut terminal = Terminal::new(backend).unwrap();
+        terminal
+            .draw(|frame| render_tab_bar(app, frame, app.view.tab_bar_rect))
+            .unwrap();
+        buffer_row_text(terminal.backend().buffer(), app.view.tab_bar_rect, 0)
+    }
+
+    #[test]
+    fn tab_agent_status_shows_attention_glyphs_only() {
+        use crate::detect::AgentState;
+
+        let mut app = AppState::test_new();
+        let ws = Workspace::test_new("test");
+        let pane = ws.tabs[0].root_pane;
+        app.workspaces = vec![ws];
+        app.ensure_test_terminals();
+        app.tab_agent_status = true;
+        app.spinner_tick = 0; // spinner_frame(0) == "⠋"
+        app.active = Some(0);
+        app.view.tab_bar_rect = Rect::new(0, 0, 30, 1);
+        let view = compute_tab_bar_view(
+            &app.workspaces[0],
+            app.view.tab_bar_rect,
+            0,
+            true,
+            false,
+            false,
+        );
+        app.view.tab_hit_areas = view.tab_hit_areas;
+
+        let terminal_id = app.workspaces[0].tabs[0].panes[&pane]
+            .attached_terminal_id
+            .clone();
+        let set_state = |app: &mut AppState, state: AgentState, seen: bool| {
+            app.terminals.get_mut(&terminal_id).unwrap().state = state;
+            app.workspaces[0].tabs[0].panes.get_mut(&pane).unwrap().seen = seen;
+        };
+
+        set_state(&mut app, AgentState::Working, true);
+        assert!(
+            tab_bar_row(&app).contains('⠋'),
+            "working: {:?}",
+            tab_bar_row(&app)
+        );
+
+        set_state(&mut app, AgentState::Blocked, true);
+        assert!(
+            tab_bar_row(&app).contains('◉'),
+            "blocked: {:?}",
+            tab_bar_row(&app)
+        );
+
+        set_state(&mut app, AgentState::Idle, false);
+        assert!(
+            tab_bar_row(&app).contains('●'),
+            "done: {:?}",
+            tab_bar_row(&app)
+        );
+
+        // Idle + seen is quiet: no status glyph.
+        set_state(&mut app, AgentState::Idle, true);
+        let row = tab_bar_row(&app);
+        assert!(
+            !row.contains('◉') && !row.contains('●') && !row.contains('⠋') && !row.contains('✓'),
+            "idle seen should be quiet: {row:?}"
+        );
+
+        // Toggle off hides the glyph even while working.
+        set_state(&mut app, AgentState::Working, true);
+        app.tab_agent_status = false;
+        assert!(!tab_bar_row(&app).contains('⠋'), "toggled off");
     }
 
     #[test]

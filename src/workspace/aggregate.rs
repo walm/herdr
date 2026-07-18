@@ -31,6 +31,24 @@ impl Tab {
         })
     }
 
+    /// Highest-attention agent `(state, seen)` across this tab's panes, using the
+    /// same precedence as workspaces (blocked > done > working > idle > unknown).
+    /// Defaults to `(Unknown, true)` when the tab has no agent panes.
+    pub fn aggregate_state(
+        &self,
+        terminals: &HashMap<TerminalId, TerminalState>,
+    ) -> (AgentState, bool) {
+        self.panes
+            .values()
+            .filter_map(|pane| {
+                terminals
+                    .get(&pane.attached_terminal_id)
+                    .map(|terminal| (terminal.state, pane.seen))
+            })
+            .max_by_key(|(state, seen)| pane_attention_priority(*state, *seen))
+            .unwrap_or((AgentState::Unknown, true))
+    }
+
     fn pane_details(
         &self,
         terminals: &HashMap<TerminalId, TerminalState>,
@@ -87,12 +105,7 @@ impl Workspace {
     ) -> (AgentState, bool) {
         self.tabs
             .iter()
-            .flat_map(|tab| tab.panes.values())
-            .filter_map(|pane| {
-                terminals
-                    .get(&pane.attached_terminal_id)
-                    .map(|terminal| (terminal.state, pane.seen))
-            })
+            .map(|tab| tab.aggregate_state(terminals))
             .max_by_key(|(state, seen)| pane_attention_priority(*state, *seen))
             .unwrap_or((AgentState::Unknown, true))
     }
