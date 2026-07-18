@@ -177,6 +177,7 @@ swap_pane_right = "prefix+shift+l"
 cycle_pane_next = "prefix+tab"
 cycle_pane_previous = "prefix+shift+tab"
 last_pane = ""
+last_pane_in_tab = ""
 split_vertical = "prefix+v"
 split_horizontal = "prefix+minus"
 close_pane = "prefix+x"
@@ -198,6 +199,8 @@ next_tab = ["prefix+n", "ctrl+alt+]"]
 ```
 
 `last_pane` switches back to the last focused pane across workspaces and tabs. It is unset by default because the tmux-style pane binding `prefix+l` is already used for pane-right focus.
+
+`last_pane_in_tab` is the same idea scoped to the current tab: it toggles between the two most recently focused panes within the active tab, like tmux's `last-pane`. Each tab tracks its own previous pane, and it never jumps to another tab or workspace. Unset by default.
 
 `last_tab` switches back to the previously active tab within the current workspace, toggling between the two like tmux's last-window. Each workspace remembers its own previous tab. It defaults to `prefix+a` ("alternate" tab); set it to an empty string to disable.
 

@@ -371,6 +371,10 @@ impl App {
                 self.last_pane_via_api();
                 leave_navigate_mode(&mut self.state);
             }
+            NavigateAction::LastPaneInTab => {
+                self.last_pane_in_tab_via_api();
+                leave_navigate_mode(&mut self.state);
+            }
             NavigateAction::Help => super::modal::open_keybind_help(&mut self.state),
             NavigateAction::Settings => super::settings::open_settings(&mut self.state),
             NavigateAction::ReloadConfig => {
@@ -604,6 +608,27 @@ impl App {
             return;
         }
         self.focus_pane_internal_via_api(ws_idx, target.pane_id);
+    }
+
+    pub(crate) fn last_pane_in_tab_via_api(&mut self) {
+        let Some(ws_idx) = self.state.active else {
+            return;
+        };
+        let Some(prev) = self
+            .state
+            .workspaces
+            .get(ws_idx)
+            .and_then(|ws| ws.active_tab())
+            .and_then(|tab| {
+                let prev = tab.previous_focused_pane?;
+                // Skip if the previous pane is gone or already focused.
+                (tab.layout.focused() != prev && tab.layout.pane_ids().contains(&prev))
+                    .then_some(prev)
+            })
+        else {
+            return;
+        };
+        self.focus_pane_internal_via_api(ws_idx, prev);
     }
 
     pub(crate) fn focus_toast_target_via_api(&mut self) {
@@ -1289,6 +1314,7 @@ pub(crate) enum NavigateAction {
     CyclePaneNext,
     CyclePanePrevious,
     LastPane,
+    LastPaneInTab,
     LastTab,
     Help,
     Settings,
@@ -1318,6 +1344,7 @@ fn copy_mode_survives_prefix_action(action: NavigateAction) -> bool {
             | NavigateAction::CyclePaneNext
             | NavigateAction::CyclePanePrevious
             | NavigateAction::LastPane
+            | NavigateAction::LastPaneInTab
             | NavigateAction::OpenNotificationTarget
     )
 }
@@ -1411,6 +1438,7 @@ fn action_for_key(
         (&kb.swap_pane_up, NavigateAction::SwapPaneUp),
         (&kb.swap_pane_right, NavigateAction::SwapPaneRight),
         (&kb.last_pane, NavigateAction::LastPane),
+        (&kb.last_pane_in_tab, NavigateAction::LastPaneInTab),
         (&kb.cycle_pane_next, NavigateAction::CyclePaneNext),
         (&kb.cycle_pane_previous, NavigateAction::CyclePanePrevious),
         (&kb.split_vertical, NavigateAction::SplitVertical),
@@ -1638,6 +1666,10 @@ pub(super) fn execute_navigate_action_in_context(
         }
         NavigateAction::LastPane => {
             state.last_pane();
+            leave_navigate_mode(state);
+        }
+        NavigateAction::LastPaneInTab => {
+            state.last_pane_in_tab();
             leave_navigate_mode(state);
         }
         NavigateAction::LastTab => {

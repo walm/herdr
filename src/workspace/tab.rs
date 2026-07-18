@@ -46,6 +46,9 @@ pub struct Tab {
     #[cfg(test)]
     pub runtimes: HashMap<PaneId, TerminalRuntime>,
     pub zoomed: bool,
+    /// Previously focused pane within this tab, for `last_pane_in_tab` toggling.
+    /// Runtime-only (Tab is never serialized directly).
+    pub(crate) previous_focused_pane: Option<PaneId>,
     pub events: mpsc::Sender<AppEvent>,
     pub(crate) render_notify: Arc<Notify>,
     pub(crate) render_dirty: Arc<AtomicBool>,
@@ -176,6 +179,7 @@ impl Tab {
                 #[cfg(test)]
                 runtimes: HashMap::new(),
                 zoomed: false,
+                previous_focused_pane: None,
                 events,
                 render_notify,
                 render_dirty,
@@ -450,6 +454,7 @@ impl Tab {
             #[cfg(test)]
             runtimes: HashMap::new(),
             zoomed: false,
+            previous_focused_pane: None,
             events,
             render_notify,
             render_dirty,

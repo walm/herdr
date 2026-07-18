@@ -202,6 +202,7 @@ const DEFAULT_CONFIG: &str = r##"# herdr configuration
 # cycle_pane_next = "prefix+tab"
 # cycle_pane_previous = "prefix+shift+tab"
 # last_pane = ""          # optional, unset by default; bind e.g. "prefix+tab" for global back-and-forth
+# last_pane_in_tab = ""   # optional, unset by default; like last_pane but scoped to the current tab
 # split_vertical = "prefix+v"
 # split_horizontal = "prefix+minus"
 # close_pane = "prefix+x"
