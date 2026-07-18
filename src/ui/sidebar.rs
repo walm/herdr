@@ -972,6 +972,14 @@ fn render_workspace_list(
         } else {
             line1.push(Span::styled(label, name_style));
         }
+        // Show the workspace's custom color as a small swatch after the name.
+        if let Some(color) = ws.custom_color {
+            line1.push(Span::styled(" ", Style::default()));
+            line1.push(Span::styled(
+                "■",
+                Style::default().fg(p.workspace_color(color)),
+            ));
+        }
 
         frame.render_widget(
             Paragraph::new(Line::from(line1)),

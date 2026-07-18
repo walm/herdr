@@ -85,7 +85,7 @@ pub(crate) use self::{
         mobile_switcher_workspace_doc_range, MobileSwitcherTarget,
     },
     panes::{apply_pane_chrome, pane_inner_rect, pane_is_scrolled_back},
-    tabs::compute_tab_bar_view,
+    tabs::{compute_tab_bar_view, workspace_tab_label_width},
     widgets::{centered_popup_rect, modal_stack_areas},
 };
 use crate::app::state::ViewLayout;
@@ -261,6 +261,7 @@ fn compute_view_internal(
                 app.tab_scroll_follow_active,
                 app.mouse_capture,
                 app.tab_number_prefix,
+                workspace_tab_label_width(app),
             )
         })
         .unwrap_or_default();

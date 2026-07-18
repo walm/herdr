@@ -141,12 +141,53 @@ pub(crate) fn reserve_workspace_ids(workspaces: &[Workspace]) {
     }
 }
 
+/// A user-chosen accent color for a workspace, drawn from the theme palette so it
+/// stays theme-aware. Resolved to a concrete color via `Palette::workspace_color`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum WorkspaceColor {
+    Mauve,
+    Red,
+    Peach,
+    Yellow,
+    Green,
+    Teal,
+    Blue,
+}
+
+impl WorkspaceColor {
+    /// All pickable colors, in display order.
+    pub const ALL: [WorkspaceColor; 7] = [
+        WorkspaceColor::Mauve,
+        WorkspaceColor::Red,
+        WorkspaceColor::Peach,
+        WorkspaceColor::Yellow,
+        WorkspaceColor::Green,
+        WorkspaceColor::Teal,
+        WorkspaceColor::Blue,
+    ];
+
+    pub fn as_str(self) -> &'static str {
+        match self {
+            WorkspaceColor::Mauve => "mauve",
+            WorkspaceColor::Red => "red",
+            WorkspaceColor::Peach => "peach",
+            WorkspaceColor::Yellow => "yellow",
+            WorkspaceColor::Green => "green",
+            WorkspaceColor::Teal => "teal",
+            WorkspaceColor::Blue => "blue",
+        }
+    }
+}
+
 /// A named workspace containing tabs.
 pub struct Workspace {
     /// Stable public workspace identity, independent of display order.
     pub id: String,
     /// User-provided override. If set, auto-derived identity stops updating.
     pub custom_name: Option<String>,
+    /// User-chosen accent color, used to tint the tab-bar workspace label.
+    pub custom_color: Option<WorkspaceColor>,
     /// Fallback workspace identity source for tests, old snapshots, or missing runtimes.
     pub identity_cwd: PathBuf,
     /// Cached current git branch for the workspace repo.
@@ -211,6 +252,7 @@ impl Workspace {
         Self {
             id,
             custom_name: label,
+            custom_color: None,
             identity_cwd: identity_cwd.clone(),
             cached_git_branch: git_branch(&identity_cwd),
             cached_git_ahead_behind: None,
@@ -392,6 +434,7 @@ impl Workspace {
             Self {
                 id,
                 custom_name: None,
+                custom_color: None,
                 identity_cwd: initial_cwd.clone(),
                 cached_git_branch: git_branch(&initial_cwd),
                 cached_git_ahead_behind: None,
@@ -1030,6 +1073,10 @@ impl Workspace {
         self.custom_name = Some(name);
     }
 
+    pub fn set_custom_color(&mut self, color: Option<WorkspaceColor>) {
+        self.custom_color = color;
+    }
+
     pub fn resolved_identity_cwd(&self) -> Option<PathBuf> {
         Some(self.identity_cwd.clone())
     }
@@ -1204,6 +1251,7 @@ impl Workspace {
         Self {
             id: generate_workspace_id(),
             custom_name: Some(name.to_string()),
+            custom_color: None,
             identity_cwd: identity_cwd.clone(),
             cached_git_branch: git_branch(&identity_cwd),
             cached_git_ahead_behind: None,

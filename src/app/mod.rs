@@ -239,6 +239,16 @@ fn agent_panel_scope_from_config(
     }
 }
 
+fn workspace_tab_label_from_config(
+    label: crate::config::WorkspaceTabLabelConfig,
+) -> state::WorkspaceTabLabel {
+    match label {
+        crate::config::WorkspaceTabLabelConfig::Auto => state::WorkspaceTabLabel::Auto,
+        crate::config::WorkspaceTabLabelConfig::On => state::WorkspaceTabLabel::On,
+        crate::config::WorkspaceTabLabelConfig::Off => state::WorkspaceTabLabel::Off,
+    }
+}
+
 /// Parse the configured agent name list into a deduplicated set of `Agent`
 /// values. Unknown agent names are silently dropped so a typo cannot disable
 /// other valid entries.
@@ -460,6 +470,7 @@ impl App {
 
         let agent_panel_sort = agent_panel_sort_from_config(config.ui.agent_panel_sort);
         let agent_panel_scope = agent_panel_scope_from_config(config.ui.agent_panel_scope);
+        let workspace_tab_label = workspace_tab_label_from_config(config.ui.workspace_tab_label);
 
         // Validate sidebar bounds before they reach any `u16::clamp(min, max)`
         // call: `clamp` panics when `min > max`. On bad config, fall back to
@@ -610,6 +621,7 @@ impl App {
             sidebar_section_split,
             agent_panel_sort,
             agent_panel_scope,
+            workspace_tab_label,
             next_agent_state_change_seq: 0,
             mouse_capture: config.ui.mouse_capture,
             right_click_passthrough_modifiers: config.ui.right_click_passthrough_modifiers(),
@@ -1406,6 +1418,8 @@ impl App {
                     agent_panel_sort_from_config(config.ui.agent_panel_sort);
                 self.state.agent_panel_scope =
                     agent_panel_scope_from_config(config.ui.agent_panel_scope);
+                self.state.workspace_tab_label =
+                    workspace_tab_label_from_config(config.ui.workspace_tab_label);
                 self.state.agent_panel_scroll = 0;
                 self.state.accent = crate::config::parse_color(&config.ui.accent);
                 if !self.state.local_sound_playback && self.state.sound != config.ui.sound {
@@ -4666,7 +4680,7 @@ last_pane = "prefix+tab"
             kind: state::ContextMenuKind::Workspace { ws_idx: 1 },
             x: 2,
             y: 2,
-            list: state::MenuListState::new(1),
+            list: state::MenuListState::new(2),
         });
         app.state.mode = Mode::ContextMenu;
 

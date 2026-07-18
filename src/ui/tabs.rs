@@ -6,12 +6,35 @@ use ratatui::{
 };
 
 use super::status::agent_icon;
-use super::text::display_width_u16;
+use super::text::{display_width_u16, truncate_end};
 use super::widgets::panel_contrast_fg;
+use crate::app::state::WorkspaceTabLabel;
 use crate::app::AppState;
 use crate::detect::AgentState;
 
 const MIN_TAB_WIDTH: u16 = 8;
+const MAX_WORKSPACE_LABEL_WIDTH: usize = 24;
+
+/// The workspace-name label shown at the right of the tab bar, if enabled.
+/// `auto` shows it only when the sidebar is collapsed; `on` always; `off` never.
+pub(crate) fn workspace_tab_label_text(app: &AppState) -> Option<String> {
+    let show = match app.workspace_tab_label {
+        WorkspaceTabLabel::Off => false,
+        WorkspaceTabLabel::On => true,
+        WorkspaceTabLabel::Auto => app.sidebar_collapsed,
+    };
+    if !show {
+        return None;
+    }
+    let ws = app.active.and_then(|idx| app.workspaces.get(idx))?;
+    let name = truncate_end(&ws.display_name(), MAX_WORKSPACE_LABEL_WIDTH);
+    Some(format!(" {name} "))
+}
+
+/// Columns reserved on the right of the tab bar for the workspace label (0 if none).
+pub(crate) fn workspace_tab_label_width(app: &AppState) -> u16 {
+    workspace_tab_label_text(app).map_or(0, |label| display_width_u16(&label))
+}
 const NEW_TAB_WIDTH: u16 = 3;
 const TAB_SCROLL_BUTTON_WIDTH: u16 = 3;
 
@@ -136,7 +159,14 @@ pub(crate) fn compute_tab_bar_view(
     follow_active: bool,
     mouse_chrome: bool,
     number_prefix: bool,
+    label_width: u16,
 ) -> TabBarView {
+    // Reserve the rightmost columns for the workspace label so tabs and trailing
+    // controls lay out within the remaining area and never overlap the label.
+    let area = Rect {
+        width: area.width.saturating_sub(label_width),
+        ..area
+    };
     if area.width == 0 || area.height == 0 {
         return TabBarView::default();
     }
@@ -282,10 +312,23 @@ pub(super) fn render_tab_bar(app: &AppState, frame: &mut Frame, area: Rect) {
     };
     let p = &app.palette;
 
+    // Fill the whole row, then reserve the rightmost columns for the workspace
+    // label by shadowing `area` with the reduced content area (matching the layout
+    // computed in `compute_tab_bar_view`); the label is drawn into the strip below.
+    let full_area = area;
     frame.render_widget(
-        Paragraph::new(" ".repeat(area.width as usize)).style(Style::default().bg(p.panel_bg)),
-        area,
+        Paragraph::new(" ".repeat(full_area.width as usize)).style(Style::default().bg(p.panel_bg)),
+        full_area,
     );
+    let workspace_label = workspace_tab_label_text(app);
+    let label_w = workspace_label
+        .as_ref()
+        .map_or(0, |label| display_width_u16(label))
+        .min(full_area.width);
+    let area = Rect {
+        width: full_area.width.saturating_sub(label_w),
+        ..full_area
+    };
 
     let first_visible_idx = app
         .view
@@ -435,6 +478,28 @@ pub(super) fn render_tab_bar(app: &AppState, frame: &mut Frame, area: Rect) {
                 .set_style(Style::default().fg(p.overlay0));
         }
     }
+
+    // Workspace label in the reserved right strip, tinted with its custom color.
+    if let Some(label) = workspace_label {
+        if label_w > 0 {
+            let bg = ws
+                .custom_color
+                .map(|color| p.workspace_color(color))
+                .unwrap_or(p.surface0);
+            let fg = super::panes::readable_text_color(bg);
+            let label_rect = Rect::new(
+                full_area.x + full_area.width - label_w,
+                full_area.y,
+                label_w,
+                1,
+            );
+            frame.render_widget(
+                Paragraph::new(label)
+                    .style(Style::default().fg(fg).bg(bg).add_modifier(Modifier::BOLD)),
+                label_rect,
+            );
+        }
+    }
 }
 
 #[cfg(test)]
@@ -470,6 +535,7 @@ mod tests {
             true,
             false,
             false,
+            0,
         );
         app.view.tab_hit_areas = view.tab_hit_areas;
 
@@ -518,6 +584,7 @@ mod tests {
             true,
             false,
             false,
+            0,
         );
         app.view.tab_hit_areas = view.tab_hit_areas;
 
@@ -565,6 +632,60 @@ mod tests {
     }
 
     #[test]
+    fn workspace_tab_label_visibility_follows_config_and_sidebar() {
+        let mut app = AppState::test_new();
+        let mut ws = Workspace::test_new("ws");
+        ws.set_custom_name("myproject".to_string());
+        app.workspaces = vec![ws];
+        app.active = Some(0);
+        app.view.tab_bar_rect = Rect::new(0, 0, 30, 1);
+
+        fn refresh(app: &mut AppState) {
+            let lw = workspace_tab_label_width(app);
+            let view = compute_tab_bar_view(
+                &app.workspaces[0],
+                app.view.tab_bar_rect,
+                0,
+                true,
+                false,
+                false,
+                lw,
+            );
+            app.view.tab_hit_areas = view.tab_hit_areas;
+        }
+
+        // "on" always shows the label.
+        app.workspace_tab_label = WorkspaceTabLabel::On;
+        app.sidebar_collapsed = false;
+        refresh(&mut app);
+        assert!(
+            tab_bar_row(&app).contains("myproject"),
+            "on: {:?}",
+            tab_bar_row(&app)
+        );
+
+        // "off" never shows it.
+        app.workspace_tab_label = WorkspaceTabLabel::Off;
+        refresh(&mut app);
+        assert!(!tab_bar_row(&app).contains("myproject"), "off");
+
+        // "auto" shows it only when the sidebar is collapsed.
+        app.workspace_tab_label = WorkspaceTabLabel::Auto;
+        app.sidebar_collapsed = false;
+        refresh(&mut app);
+        assert!(
+            !tab_bar_row(&app).contains("myproject"),
+            "auto + sidebar open"
+        );
+        app.sidebar_collapsed = true;
+        refresh(&mut app);
+        assert!(
+            tab_bar_row(&app).contains("myproject"),
+            "auto + sidebar collapsed"
+        );
+    }
+
+    #[test]
     fn tab_number_prefix_numbers_named_tabs_only() {
         let mut app = AppState::test_new();
         let mut ws = Workspace::test_new("test");
@@ -582,6 +703,7 @@ mod tests {
             true,
             false,
             true,
+            0,
         );
         app.view.tab_hit_areas = view.tab_hit_areas;
 
@@ -613,6 +735,7 @@ mod tests {
             true,
             false,
             false,
+            0,
         );
         app.view.tab_hit_areas = view.tab_hit_areas;
 
@@ -666,6 +789,7 @@ mod tests {
             true,
             false,
             false,
+            0,
         );
         app.view.tab_hit_areas = view.tab_hit_areas;
 

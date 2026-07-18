@@ -408,6 +408,7 @@ fn restore_workspace(
         Some(Workspace {
             id: workspace_id,
             custom_name: snap.custom_name.clone(),
+            custom_color: snap.custom_color,
             identity_cwd: snap.identity_cwd.clone(),
             cached_git_branch: crate::workspace::git_branch(&snap.identity_cwd),
             cached_git_ahead_behind: None,
@@ -1157,6 +1158,7 @@ mod tests {
             workspaces: vec![WorkspaceSnapshot {
                 id: Some("workspace".into()),
                 custom_name: None,
+                custom_color: None,
                 identity_cwd: cwd.clone(),
                 worktree_space: None,
                 public_pane_numbers: HashMap::new(),
@@ -1234,6 +1236,7 @@ mod tests {
             workspaces: vec![WorkspaceSnapshot {
                 id: Some("w1".into()),
                 custom_name: None,
+                custom_color: None,
                 identity_cwd: cwd.clone(),
                 worktree_space: None,
                 public_pane_numbers: HashMap::from([(10, 1), (20, 3)]),
@@ -1339,6 +1342,7 @@ mod tests {
             workspaces: vec![WorkspaceSnapshot {
                 id: Some("w1".into()),
                 custom_name: None,
+                custom_color: None,
                 identity_cwd: cwd.clone(),
                 worktree_space: None,
                 public_pane_numbers: HashMap::from([(10, 1), (11, 2), (12, 3), (13, 4)]),
@@ -1423,6 +1427,7 @@ mod tests {
         let snapshot = WorkspaceSnapshot {
             id: Some("w1".into()),
             custom_name: None,
+            custom_color: None,
             identity_cwd: cwd,
             worktree_space: None,
             public_pane_numbers: HashMap::new(),
@@ -1462,6 +1467,7 @@ mod tests {
             workspaces: vec![WorkspaceSnapshot {
                 id: Some("workspace".into()),
                 custom_name: None,
+                custom_color: None,
                 identity_cwd: cwd.clone(),
                 worktree_space: None,
                 public_pane_numbers: HashMap::new(),
@@ -1666,6 +1672,7 @@ mod tests {
             workspaces: vec![WorkspaceSnapshot {
                 id: Some("workspace".into()),
                 custom_name: None,
+                custom_color: None,
                 identity_cwd: cwd,
                 worktree_space: None,
                 public_pane_numbers: HashMap::new(),
