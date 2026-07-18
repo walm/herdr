@@ -139,7 +139,11 @@ impl App {
             .workspaces
             .get(ws_idx)
             .filter(|ws| ws.active_tab != tab_idx)
-            .and_then(|ws| ws.tabs.get(ws.active_tab).map(|tab| (ws.id.clone(), tab.number)));
+            .and_then(|ws| {
+                ws.tabs
+                    .get(ws.active_tab)
+                    .map(|tab| (ws.id.clone(), tab.number))
+            });
         if let Some((ws_id, number)) = previous {
             self.state.previous_tab_by_workspace.insert(ws_id, number);
         }

@@ -9,7 +9,7 @@ use ratatui::{
 use super::scrollbar::{render_scrollbar, should_show_scrollbar};
 use super::status::{agent_icon, state_dot, state_label, state_label_color};
 use super::text::{display_width, display_width_u16, truncate_end};
-use crate::app::state::{AgentPanelSort, Palette};
+use crate::app::state::{AgentPanelScope, AgentPanelSort, Palette};
 use crate::app::{AppState, Mode};
 use crate::detect::AgentState;
 use crate::terminal::TerminalRuntimeRegistry;
@@ -92,6 +92,39 @@ pub(crate) fn agent_panel_toggle_rect(area: Rect, sort: AgentPanelSort) -> Rect 
     )
 }
 
+fn agent_panel_scope_label(scope: AgentPanelScope) -> &'static str {
+    match scope {
+        AgentPanelScope::AllWorkspaces => "all",
+        AgentPanelScope::CurrentWorkspace => "current",
+    }
+}
+
+/// Hit/render rect for the scope toggle, placed just left of the sort toggle on
+/// the header row. Returns an empty rect when the sidebar is too narrow to fit it.
+pub(crate) fn agent_panel_scope_toggle_rect(
+    area: Rect,
+    scope: AgentPanelScope,
+    sort: AgentPanelSort,
+) -> Rect {
+    if area.width == 0 || area.height < 2 {
+        return Rect::default();
+    }
+
+    let scope_width = display_width_u16(agent_panel_scope_label(scope));
+    let sort_width = display_width_u16(agent_panel_sort_label(sort));
+    // Leave a one-column gap before the sort toggle to its right.
+    let right_edge = area.width.saturating_sub(sort_width).saturating_sub(1);
+    if right_edge < scope_width {
+        return Rect::default();
+    }
+    Rect::new(
+        area.x + right_edge - scope_width,
+        area.y + 1,
+        scope_width,
+        1,
+    )
+}
+
 pub(crate) fn agent_panel_entries(app: &AppState) -> Vec<AgentPanelEntry> {
     agent_panel_entries_with_runtimes(app, None)
 }
@@ -101,6 +134,26 @@ pub(crate) fn agent_panel_entries_from(
     terminal_runtimes: &TerminalRuntimeRegistry,
 ) -> Vec<AgentPanelEntry> {
     agent_panel_entries_with_runtimes(app, Some(terminal_runtimes))
+}
+
+/// The workspace the agent panel scopes to when `agent_panel_scope` is
+/// `CurrentWorkspace`. While the user is browsing the sidebar or in an overlay
+/// opened from it, this follows the highlighted (`selected`) workspace so the
+/// list updates live; otherwise it tracks the `active` workspace.
+fn agent_panel_current_workspace_idx(app: &AppState) -> Option<usize> {
+    match app.mode {
+        Mode::Navigate
+        | Mode::RenameWorkspace
+        | Mode::RenamePane
+        | Mode::Resize
+        | Mode::ConfirmClose
+        | Mode::ContextMenu
+        | Mode::Settings
+        | Mode::GlobalMenu
+        | Mode::KeybindHelp
+        | Mode::ProductAnnouncement => Some(app.selected),
+        _ => app.active,
+    }
 }
 
 fn agent_panel_entries_with_runtimes(
@@ -140,6 +193,12 @@ fn agent_panel_entries_with_runtimes(
                 })
         })
         .collect();
+
+    if matches!(app.agent_panel_scope, AgentPanelScope::CurrentWorkspace) {
+        if let Some(current) = agent_panel_current_workspace_idx(app) {
+            entries.retain(|entry| entry.ws_idx == current);
+        }
+    }
 
     if matches!(app.agent_panel_sort, AgentPanelSort::Priority) {
         entries.sort_by_key(|entry| {
@@ -1043,6 +1102,18 @@ fn render_agent_detail(
             toggle_rect,
         );
     }
+    let scope_rect =
+        agent_panel_scope_toggle_rect(area, app.agent_panel_scope, app.agent_panel_sort);
+    if scope_rect != Rect::default() {
+        frame.render_widget(
+            Paragraph::new(Span::styled(
+                agent_panel_scope_label(app.agent_panel_scope),
+                Style::default().fg(p.overlay0).add_modifier(Modifier::BOLD),
+            ))
+            .alignment(Alignment::Right),
+            scope_rect,
+        );
+    }
 
     let details = agent_panel_entries_from(app, terminal_runtimes);
     let metrics = agent_panel_scroll_metrics(app, area);
@@ -1244,6 +1315,62 @@ mod tests {
         assert_eq!(entries[1].primary_label, "two");
         assert_eq!(entries[1].primary_tab_label.as_deref(), Some("logs"));
         assert_eq!(entries[1].agent_label.as_deref(), Some("claude"));
+    }
+
+    #[test]
+    fn current_workspace_scope_filters_agent_panel_entries() {
+        let mut app = crate::app::state::AppState::test_new();
+        let first = Workspace::test_new("one");
+        let first_pane = first.tabs[0].root_pane;
+        let second = Workspace::test_new("two");
+        let second_pane = second.tabs[0].root_pane;
+
+        app.workspaces = vec![first, second];
+        app.ensure_test_terminals();
+        let first_terminal_id = app.workspaces[0].tabs[0].panes[&first_pane]
+            .attached_terminal_id
+            .clone();
+        app.terminals
+            .get_mut(&first_terminal_id)
+            .unwrap()
+            .detected_agent = Some(Agent::Pi);
+        let second_terminal_id = app.workspaces[1].tabs[0].panes[&second_pane]
+            .attached_terminal_id
+            .clone();
+        app.terminals
+            .get_mut(&second_terminal_id)
+            .unwrap()
+            .detected_agent = Some(Agent::Claude);
+
+        app.agent_panel_scope = AgentPanelScope::CurrentWorkspace;
+        app.mode = Mode::Terminal;
+        app.active = Some(0);
+        app.selected = 0;
+
+        // Scoped to the active workspace only.
+        let entries = agent_panel_entries(&app);
+        assert_eq!(entries.len(), 1);
+        assert_eq!(entries[0].ws_idx, 0);
+        assert_eq!(entries[0].agent_label.as_deref(), Some("pi"));
+
+        // Switching the active workspace changes the scoped list.
+        app.active = Some(1);
+        let entries = agent_panel_entries(&app);
+        assert_eq!(entries.len(), 1);
+        assert_eq!(entries[0].ws_idx, 1);
+        assert_eq!(entries[0].agent_label.as_deref(), Some("claude"));
+
+        // While browsing the sidebar (Navigate mode) it follows the highlighted workspace.
+        app.mode = Mode::Navigate;
+        app.active = Some(1);
+        app.selected = 0;
+        let entries = agent_panel_entries(&app);
+        assert_eq!(entries.len(), 1);
+        assert_eq!(entries[0].ws_idx, 0);
+
+        // `all` scope shows agents from every workspace.
+        app.agent_panel_scope = AgentPanelScope::AllWorkspaces;
+        assert_eq!(agent_panel_entries(&app).len(), 2);
     }
 
     #[test]

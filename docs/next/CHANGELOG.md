@@ -8,6 +8,7 @@
 - You can now bind an action to the prefix key itself (prefix+prefix), for example `last_tab = "prefix+ctrl+b"` when the prefix is `ctrl+b`. This overrides the default tmux-style send-prefix on a double-tap; leave it unbound to keep sending a literal prefix to the focused pane.
 - Added `ui.tab_number_prefix` (default false) to prefix each tab label in the tab bar with its position number, e.g. `1: main`. Unnamed tabs already show their number and are left unchanged.
 - Added a `last_pane_in_tab` keybinding (unset by default) that toggles between the two most recently focused panes within the current tab, like tmux's `last-pane`. Each tab tracks its own previous pane and it never jumps to another tab or workspace (unlike the global `last_pane`).
+- Added `ui.agent_panel_scope` (default `all`) to scope the Agents sidebar panel to the current workspace. Set it to `current`, or click the scope label in the panel header, to show only agents in the active workspace; the list then follows the workspace you switch to.
 
 ## [0.7.3] - 2026-07-08
 

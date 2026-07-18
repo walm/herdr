@@ -429,6 +429,27 @@ impl AppState {
             && row < rect.y + rect.height
     }
 
+    pub(super) fn on_agent_panel_scope_toggle(&self, col: u16, row: u16) -> bool {
+        if self.sidebar_collapsed {
+            return false;
+        }
+
+        let (_, detail_area) = crate::ui::expanded_sidebar_sections(
+            self.view.sidebar_rect,
+            self.sidebar_section_split,
+        );
+        let rect = crate::ui::agent_panel_scope_toggle_rect(
+            detail_area,
+            self.agent_panel_scope,
+            self.agent_panel_sort,
+        );
+        rect.width > 0
+            && col >= rect.x
+            && col < rect.x + rect.width
+            && row >= rect.y
+            && row < rect.y + rect.height
+    }
+
     pub(super) fn agent_detail_target_at(
         &self,
         row: u16,
@@ -476,7 +497,7 @@ mod tests {
 
     use super::super::{app_for_mouse_test, capture_snapshot, mouse, unique_temp_path};
     use crate::{
-        app::state::{AgentPanelSort, DragTarget, Mode},
+        app::state::{AgentPanelScope, AgentPanelSort, DragTarget, Mode},
         config::SidebarCollapsedModeConfig,
         detect::{Agent, AgentState},
         workspace::Workspace,
@@ -712,6 +733,38 @@ mod tests {
         ));
 
         assert_eq!(app.state.agent_panel_sort, AgentPanelSort::Priority);
+        assert_eq!(app.state.agent_panel_scroll, 0);
+    }
+
+    #[test]
+    fn clicking_agent_panel_scope_toggle_switches_scope() {
+        let mut app = app_for_mouse_test();
+        app.state.workspaces = vec![Workspace::test_new("test")];
+        app.state.active = Some(0);
+        app.state.selected = 0;
+        app.state.mode = Mode::Terminal;
+        app.state.agent_panel_scroll = 3;
+
+        let (_, detail_area) = crate::ui::expanded_sidebar_sections(
+            app.state.view.sidebar_rect,
+            app.state.sidebar_section_split,
+        );
+        let toggle = crate::ui::agent_panel_scope_toggle_rect(
+            detail_area,
+            app.state.agent_panel_scope,
+            app.state.agent_panel_sort,
+        );
+        assert!(toggle.width > 0, "scope toggle should be visible");
+        app.handle_mouse(mouse(
+            MouseEventKind::Down(MouseButton::Left),
+            toggle.x,
+            toggle.y,
+        ));
+
+        assert_eq!(
+            app.state.agent_panel_scope,
+            AgentPanelScope::CurrentWorkspace
+        );
         assert_eq!(app.state.agent_panel_scroll, 0);
     }
 
