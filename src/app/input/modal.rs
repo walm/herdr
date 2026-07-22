@@ -699,7 +699,10 @@ pub(super) fn apply_context_menu_action(
     let item = menu.items().get(idx).copied();
     let (menu_x, menu_y) = (menu.x, menu.y);
     match (menu.kind, item) {
-        (ContextMenuKind::Workspace { ws_idx }, Some("Set color")) => {
+        (
+            ContextMenuKind::Workspace { ws_idx } | ContextMenuKind::GitWorkspace { ws_idx, .. },
+            Some("Set color"),
+        ) => {
             open_workspace_color_menu(state, ws_idx, menu_x, menu_y);
         }
         (ContextMenuKind::WorkspaceColor { ws_idx }, item) => {
@@ -1121,7 +1124,11 @@ impl App {
         let item = menu.items().get(idx).copied();
         let (menu_x, menu_y) = (menu.x, menu.y);
         match (menu.kind, item) {
-            (ContextMenuKind::Workspace { ws_idx }, Some("Set color")) => {
+            (
+                ContextMenuKind::Workspace { ws_idx }
+                | ContextMenuKind::GitWorkspace { ws_idx, .. },
+                Some("Set color"),
+            ) => {
                 open_workspace_color_menu(&mut self.state, ws_idx, menu_x, menu_y);
             }
             (ContextMenuKind::WorkspaceColor { ws_idx }, item) => {
@@ -1956,7 +1963,12 @@ mod tests {
         };
         let mut terminal_runtimes = crate::terminal::TerminalRuntimeRegistry::new();
 
-        apply_context_menu_action(&mut state, &mut terminal_runtimes, menu, 1);
+        let idx = menu
+            .items()
+            .iter()
+            .position(|item| *item == "Close group")
+            .expect("close group item");
+        apply_context_menu_action(&mut state, &mut terminal_runtimes, menu, idx);
 
         assert_eq!(state.selected, 0);
         assert_eq!(state.mode, Mode::ConfirmClose);

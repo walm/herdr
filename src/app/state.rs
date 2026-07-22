@@ -1159,11 +1159,22 @@ impl ContextMenuState {
                 is_linked_worktree: false,
                 has_worktree_children: false,
                 ..
-            } => &["Rename", "Close", "New worktree", "Open worktree..."],
+            } => &[
+                "Rename",
+                "Set color",
+                "Close",
+                "New worktree",
+                "Open worktree...",
+            ],
             ContextMenuKind::GitWorkspace {
                 is_linked_worktree: true,
                 ..
-            } => &["Rename", "Close", "Delete worktree checkout..."],
+            } => &[
+                "Rename",
+                "Set color",
+                "Close",
+                "Delete worktree checkout...",
+            ],
             ContextMenuKind::GitWorkspace {
                 is_linked_worktree: false,
                 has_worktree_children: true,
@@ -1171,6 +1182,7 @@ impl ContextMenuState {
                 ..
             } => &[
                 "Rename",
+                "Set color",
                 "Close group",
                 "New worktree",
                 "Open worktree...",
@@ -1183,6 +1195,7 @@ impl ContextMenuState {
                 ..
             } => &[
                 "Rename",
+                "Set color",
                 "Close group",
                 "New worktree",
                 "Open worktree...",
@@ -2295,7 +2308,12 @@ mod tests {
 
         assert_eq!(
             menu.items(),
-            &["Rename", "Close", "Delete worktree checkout..."]
+            &[
+                "Rename",
+                "Set color",
+                "Close",
+                "Delete worktree checkout..."
+            ]
         );
     }
 
@@ -2315,7 +2333,13 @@ mod tests {
 
         assert_eq!(
             menu.items(),
-            &["Rename", "Close", "New worktree", "Open worktree..."]
+            &[
+                "Rename",
+                "Set color",
+                "Close",
+                "New worktree",
+                "Open worktree..."
+            ]
         );
     }
 
@@ -2337,6 +2361,7 @@ mod tests {
             menu.items(),
             &[
                 "Rename",
+                "Set color",
                 "Close group",
                 "New worktree",
                 "Open worktree...",
