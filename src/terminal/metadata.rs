@@ -13,11 +13,13 @@ pub struct AgentMetadata {
     pub title: Option<String>,
     pub display_agent: Option<String>,
     pub custom_status: Option<String>,
+    pub marker: Option<String>,
     pub state_labels: HashMap<String, String>,
     pub reported_at: Instant,
     title_reported_at: Option<Instant>,
     display_agent_reported_at: Option<Instant>,
     custom_status_reported_at: Option<Instant>,
+    marker_reported_at: Option<Instant>,
     state_label_reported_at: HashMap<String, Instant>,
     pub ttl: Option<Duration>,
     expiry_event_pending: bool,
@@ -31,10 +33,12 @@ pub struct AgentMetadataReport {
     pub title: Option<String>,
     pub display_agent: Option<String>,
     pub custom_status: Option<String>,
+    pub marker: Option<String>,
     pub state_labels: HashMap<String, String>,
     pub clear_title: bool,
     pub clear_display_agent: bool,
     pub clear_custom_status: bool,
+    pub clear_marker: bool,
     pub clear_state_labels: bool,
     pub ttl: Option<Duration>,
     pub seq: Option<u64>,
@@ -45,6 +49,8 @@ pub struct EffectivePresentation {
     pub title: Option<String>,
     pub display_agent: Option<String>,
     pub custom_status: Option<String>,
+    /// Short display-only marker (emoji/icon) shown in the tab bar and sidebar.
+    pub marker: Option<String>,
     pub state_labels: HashMap<String, String>,
 }
 
@@ -54,6 +60,7 @@ impl EffectivePresentation {
             title: None,
             display_agent: None,
             custom_status: None,
+            marker: None,
             state_labels: HashMap::new(),
         }
     }
@@ -101,6 +108,7 @@ impl TerminalState {
         let has_set_fields = report.title.is_some()
             || report.display_agent.is_some()
             || report.custom_status.is_some()
+            || report.marker.is_some()
             || !report.state_labels.is_empty();
 
         let report_source = report.source.clone();
@@ -109,6 +117,7 @@ impl TerminalState {
         if report.clear_title
             || report.clear_display_agent
             || report.clear_custom_status
+            || report.clear_marker
             || report.clear_state_labels
         {
             let metadata = self
@@ -121,11 +130,13 @@ impl TerminalState {
                     title: None,
                     display_agent: None,
                     custom_status: None,
+                    marker: None,
                     state_labels: HashMap::new(),
                     reported_at: now,
                     title_reported_at: None,
                     display_agent_reported_at: None,
                     custom_status_reported_at: None,
+                    marker_reported_at: None,
                     state_label_reported_at: HashMap::new(),
                     ttl: report.ttl,
                     expiry_event_pending: false,
@@ -141,6 +152,10 @@ impl TerminalState {
             if report.clear_custom_status {
                 metadata.custom_status = None;
                 metadata.custom_status_reported_at = None;
+            }
+            if report.clear_marker {
+                metadata.marker = None;
+                metadata.marker_reported_at = None;
             }
             if report.clear_state_labels {
                 metadata.state_labels.clear();
@@ -164,6 +179,10 @@ impl TerminalState {
                 metadata.custom_status = Some(custom_status);
                 metadata.custom_status_reported_at = Some(now);
             }
+            if let Some(marker) = report.marker {
+                metadata.marker = Some(marker);
+                metadata.marker_reported_at = Some(now);
+            }
             for (state, label) in report.state_labels {
                 metadata.state_labels.insert(state.clone(), label);
                 metadata.state_label_reported_at.insert(state, now);
@@ -177,6 +196,7 @@ impl TerminalState {
             let title_reported_at = report.title.as_ref().map(|_| now);
             let display_agent_reported_at = report.display_agent.as_ref().map(|_| now);
             let custom_status_reported_at = report.custom_status.as_ref().map(|_| now);
+            let marker_reported_at = report.marker.as_ref().map(|_| now);
             let state_label_reported_at = report
                 .state_labels
                 .keys()
@@ -191,11 +211,13 @@ impl TerminalState {
                     title: report.title,
                     display_agent: report.display_agent,
                     custom_status: report.custom_status,
+                    marker: report.marker,
                     state_labels: report.state_labels,
                     reported_at: now,
                     title_reported_at,
                     display_agent_reported_at,
                     custom_status_reported_at,
+                    marker_reported_at,
                     state_label_reported_at,
                     ttl: report.ttl,
                     expiry_event_pending: false,
@@ -234,6 +256,11 @@ impl TerminalState {
     pub fn effective_custom_status(&self) -> Option<String> {
         self.effective_presentation_for_state_at(self.state, Instant::now())
             .custom_status
+    }
+
+    /// Effective marker with its report time, for tab/workspace recency ranking.
+    pub fn effective_marker_at(&self) -> Option<(String, Instant)> {
+        self.newest_metadata_marker(Instant::now(), true)
     }
 
     pub fn effective_title(&self) -> Option<String> {
@@ -347,6 +374,9 @@ impl TerminalState {
         presentation.state_labels = self.effective_metadata_state_labels(now, enforce_ttl);
         presentation.custom_status =
             self.effective_custom_status_for_state_at_with_ttl(state, now, enforce_ttl);
+        presentation.marker = self
+            .newest_metadata_marker(now, enforce_ttl)
+            .map(|(marker, _)| marker);
         presentation
     }
 
@@ -400,6 +430,16 @@ impl TerminalState {
             .and_then(|metadata| metadata.custom_status.clone())
     }
 
+    /// Newest marker across this pane's metadata sources, with the time it was
+    /// reported. The timestamp travels up to tab/workspace aggregation so the
+    /// most recently marked pane (and tab) wins.
+    fn newest_metadata_marker(&self, now: Instant, enforce_ttl: bool) -> Option<(String, Instant)> {
+        self.valid_agent_metadata(now, enforce_ttl)
+            .filter(|metadata| metadata.marker.is_some())
+            .max_by_key(|metadata| metadata.marker_reported_at)
+            .and_then(|metadata| Some((metadata.marker.clone()?, metadata.marker_reported_at?)))
+    }
+
     fn effective_metadata_state_labels(
         &self,
         now: Instant,
@@ -433,6 +473,7 @@ impl TerminalState {
         if metadata.title.is_none()
             && metadata.display_agent.is_none()
             && metadata.custom_status.is_none()
+            && metadata.marker.is_none()
             && metadata.state_labels.is_empty()
         {
             return false;
@@ -447,6 +488,7 @@ impl TerminalState {
         (metadata.title.is_some()
             || metadata.display_agent.is_some()
             || metadata.custom_status.is_some()
+            || metadata.marker.is_some()
             || !metadata.state_labels.is_empty())
             && self.agent_metadata_matches_guards(metadata)
     }
@@ -528,10 +570,12 @@ mod tests {
             title: None,
             display_agent: None,
             custom_status: custom_status.map(str::to_string),
+            marker: None,
             state_labels: HashMap::new(),
             clear_title: false,
             clear_display_agent: false,
             clear_custom_status,
+            clear_marker: false,
             clear_state_labels: false,
             ttl: None,
             seq: None,
@@ -646,10 +690,12 @@ mod tests {
             title: Some("Refactor auth".into()),
             display_agent: Some("Claude: auth".into()),
             custom_status: Some("middleware".into()),
+            marker: None,
             state_labels: HashMap::from([("working".into(), "deep in the mines".into())]),
             clear_title: false,
             clear_display_agent: false,
             clear_custom_status: false,
+            clear_marker: false,
             clear_state_labels: false,
             ttl: None,
             seq: None,
@@ -680,10 +726,12 @@ mod tests {
             title: Some("Prompt title".into()),
             display_agent: None,
             custom_status: None,
+            marker: None,
             state_labels: HashMap::new(),
             clear_title: false,
             clear_display_agent: false,
             clear_custom_status: false,
+            clear_marker: false,
             clear_state_labels: false,
             ttl: None,
             seq: None,
@@ -747,10 +795,12 @@ mod tests {
             title: Some("Prompt title".into()),
             display_agent: None,
             custom_status: None,
+            marker: None,
             state_labels: HashMap::new(),
             clear_title: false,
             clear_display_agent: false,
             clear_custom_status: false,
+            clear_marker: false,
             clear_state_labels: false,
             ttl: None,
             seq: Some(1),
@@ -762,10 +812,12 @@ mod tests {
             title: None,
             display_agent: None,
             custom_status: Some("activity".into()),
+            marker: None,
             state_labels: HashMap::new(),
             clear_title: false,
             clear_display_agent: false,
             clear_custom_status: false,
+            clear_marker: false,
             clear_state_labels: false,
             ttl: None,
             seq: Some(1),
@@ -793,10 +845,12 @@ mod tests {
             title: None,
             display_agent: Some("First display".into()),
             custom_status: Some("old".into()),
+            marker: None,
             state_labels: HashMap::new(),
             clear_title: false,
             clear_display_agent: false,
             clear_custom_status: false,
+            clear_marker: false,
             clear_state_labels: false,
             ttl: None,
             seq: Some(1),
@@ -808,10 +862,12 @@ mod tests {
             title: None,
             display_agent: None,
             custom_status: Some("new".into()),
+            marker: None,
             state_labels: HashMap::new(),
             clear_title: false,
             clear_display_agent: false,
             clear_custom_status: false,
+            clear_marker: false,
             clear_state_labels: false,
             ttl: None,
             seq: Some(1),
@@ -823,10 +879,12 @@ mod tests {
             title: Some("Fresh title".into()),
             display_agent: None,
             custom_status: None,
+            marker: None,
             state_labels: HashMap::new(),
             clear_title: false,
             clear_display_agent: true,
             clear_custom_status: false,
+            clear_marker: false,
             clear_state_labels: false,
             ttl: None,
             seq: Some(2),
@@ -856,10 +914,12 @@ mod tests {
             title: None,
             display_agent: None,
             custom_status: Some("activity".into()),
+            marker: None,
             state_labels: HashMap::new(),
             clear_title: true,
             clear_display_agent: false,
             clear_custom_status: false,
+            clear_marker: false,
             clear_state_labels: false,
             ttl: None,
             seq: None,
@@ -888,10 +948,12 @@ mod tests {
             title: Some("Old title".into()),
             display_agent: None,
             custom_status: Some("old".into()),
+            marker: None,
             state_labels: HashMap::new(),
             clear_title: false,
             clear_display_agent: false,
             clear_custom_status: false,
+            clear_marker: false,
             clear_state_labels: false,
             ttl: Some(Duration::from_millis(1)),
             seq: None,
@@ -905,10 +967,12 @@ mod tests {
             title: None,
             display_agent: None,
             custom_status: Some("fresh".into()),
+            marker: None,
             state_labels: HashMap::new(),
             clear_title: true,
             clear_display_agent: false,
             clear_custom_status: false,
+            clear_marker: false,
             clear_state_labels: false,
             ttl: None,
             seq: None,
@@ -942,10 +1006,12 @@ mod tests {
             title: Some("Prompt title".into()),
             display_agent: None,
             custom_status: Some("old".into()),
+            marker: None,
             state_labels: HashMap::new(),
             clear_title: false,
             clear_display_agent: false,
             clear_custom_status: false,
+            clear_marker: false,
             clear_state_labels: false,
             ttl: Some(Duration::from_millis(1)),
             seq: None,
@@ -959,10 +1025,12 @@ mod tests {
             title: None,
             display_agent: None,
             custom_status: None,
+            marker: None,
             state_labels: HashMap::new(),
             clear_title: false,
             clear_display_agent: false,
             clear_custom_status: true,
+            clear_marker: false,
             clear_state_labels: false,
             ttl: None,
             seq: None,
@@ -999,10 +1067,12 @@ mod tests {
             title: None,
             display_agent: None,
             custom_status: Some("activity".into()),
+            marker: None,
             state_labels: HashMap::new(),
             clear_title: false,
             clear_display_agent: false,
             clear_custom_status: false,
+            clear_marker: false,
             clear_state_labels: false,
             ttl: Some(Duration::from_millis(1)),
             seq: None,
@@ -1041,10 +1111,12 @@ mod tests {
             title: None,
             display_agent: None,
             custom_status: Some("stale".into()),
+            marker: None,
             state_labels: HashMap::new(),
             clear_title: false,
             clear_display_agent: false,
             clear_custom_status: false,
+            clear_marker: false,
             clear_state_labels: false,
             ttl: Some(Duration::from_millis(1)),
             seq: None,
@@ -1091,10 +1163,12 @@ mod tests {
             title: Some("First".into()),
             display_agent: None,
             custom_status: None,
+            marker: None,
             state_labels: HashMap::new(),
             clear_title: false,
             clear_display_agent: false,
             clear_custom_status: false,
+            clear_marker: false,
             clear_state_labels: false,
             ttl: Some(Duration::from_millis(1)),
             seq: None,
@@ -1107,10 +1181,12 @@ mod tests {
             title: None,
             display_agent: Some("Second".into()),
             custom_status: None,
+            marker: None,
             state_labels: HashMap::new(),
             clear_title: false,
             clear_display_agent: false,
             clear_custom_status: false,
+            clear_marker: false,
             clear_state_labels: false,
             ttl: Some(Duration::from_millis(2)),
             seq: None,
@@ -1152,10 +1228,12 @@ mod tests {
             title: None,
             display_agent: None,
             custom_status: Some("instant".into()),
+            marker: None,
             state_labels: HashMap::new(),
             clear_title: false,
             clear_display_agent: false,
             clear_custom_status: false,
+            clear_marker: false,
             clear_state_labels: false,
             ttl: Some(Duration::ZERO),
             seq: None,
@@ -1194,10 +1272,12 @@ mod tests {
             title: None,
             display_agent: None,
             custom_status: Some("instant".into()),
+            marker: None,
             state_labels: HashMap::new(),
             clear_title: false,
             clear_display_agent: false,
             clear_custom_status: false,
+            clear_marker: false,
             clear_state_labels: false,
             ttl: Some(Duration::ZERO),
             seq: None,
@@ -1240,10 +1320,12 @@ mod tests {
             title: Some("Expired title".into()),
             display_agent: None,
             custom_status: None,
+            marker: None,
             state_labels: HashMap::new(),
             clear_title: false,
             clear_display_agent: false,
             clear_custom_status: false,
+            clear_marker: false,
             clear_state_labels: false,
             ttl: Some(Duration::ZERO),
             seq: None,
@@ -1257,10 +1339,12 @@ mod tests {
             title: None,
             display_agent: Some("Fresh display".into()),
             custom_status: None,
+            marker: None,
             state_labels: HashMap::new(),
             clear_title: false,
             clear_display_agent: false,
             clear_custom_status: true,
+            clear_marker: false,
             clear_state_labels: false,
             ttl: None,
             seq: None,

@@ -21,7 +21,7 @@ use crate::layout::{find_in_direction, NavDirection, PaneId};
 
 use super::super::api_helpers::{
     detect_state_from_api, encode_api_keys, encode_api_text, normalize_custom_status,
-    normalize_reported_agent_label,
+    normalize_marker, normalize_reported_agent_label,
 };
 use super::responses::{encode_error, encode_success};
 
@@ -1296,6 +1296,7 @@ impl App {
         let raw_title_set = params.title.is_some();
         let raw_display_agent_set = params.display_agent.is_some();
         let raw_custom_status_set = params.custom_status.is_some();
+        let raw_marker_set = params.marker.is_some();
         let raw_state_labels_set = !params.state_labels.is_empty();
         let ttl = match normalize_metadata_ttl(params.ttl_ms) {
             Ok(ttl) => ttl,
@@ -1304,6 +1305,7 @@ impl App {
         let title = normalize_presentation_text(params.title);
         let display_agent = normalize_presentation_text(params.display_agent);
         let custom_status = normalize_custom_status(params.custom_status);
+        let marker = normalize_marker(params.marker);
         let applies_to_source = match params.applies_to_source {
             Some(applies_to_source) => match normalize_metadata_source(applies_to_source) {
                 Ok(applies_to_source) => Some(applies_to_source),
@@ -1324,6 +1326,7 @@ impl App {
         if raw_title_set && params.clear_title
             || raw_display_agent_set && params.clear_display_agent
             || raw_custom_status_set && params.clear_custom_status
+            || raw_marker_set && params.clear_marker
             || raw_state_labels_set && params.clear_state_labels
         {
             return encode_error(
@@ -1335,10 +1338,12 @@ impl App {
         if title.is_none()
             && display_agent.is_none()
             && custom_status.is_none()
+            && marker.is_none()
             && state_labels.is_empty()
             && !params.clear_title
             && !params.clear_display_agent
             && !params.clear_custom_status
+            && !params.clear_marker
             && !params.clear_state_labels
         {
             return encode_error(
@@ -1355,10 +1360,12 @@ impl App {
             title,
             display_agent,
             custom_status,
+            marker,
             state_labels,
             clear_title: params.clear_title,
             clear_display_agent: params.clear_display_agent,
             clear_custom_status: params.clear_custom_status,
+            clear_marker: params.clear_marker,
             clear_state_labels: params.clear_state_labels,
             seq: params.seq,
             ttl,
@@ -1905,10 +1912,12 @@ mod tests {
             title: None,
             display_agent: None,
             custom_status: Some("activity".into()),
+            marker: None,
             state_labels: std::collections::HashMap::new(),
             clear_title: false,
             clear_display_agent: false,
             clear_custom_status: false,
+            clear_marker: false,
             clear_state_labels: false,
             seq: None,
             ttl_ms: None,

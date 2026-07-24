@@ -304,6 +304,9 @@ pub struct PaneReportMetadataParams {
     pub display_agent: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub custom_status: Option<String>,
+    /// Short display-only marker (emoji/icon), capped at 2 display columns.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub marker: Option<String>,
     #[serde(default, skip_serializing_if = "HashMap::is_empty")]
     pub state_labels: HashMap<String, String>,
     #[serde(default)]
@@ -312,6 +315,8 @@ pub struct PaneReportMetadataParams {
     pub clear_display_agent: bool,
     #[serde(default)]
     pub clear_custom_status: bool,
+    #[serde(default)]
+    pub clear_marker: bool,
     #[serde(default)]
     pub clear_state_labels: bool,
     #[serde(default, skip_serializing_if = "Option::is_none")]

@@ -1224,7 +1224,7 @@ fn pane_release_agent(args: &[String]) -> std::io::Result<i32> {
 
 fn pane_report_metadata(args: &[String]) -> std::io::Result<i32> {
     let Some(raw_pane_id) = args.first() else {
-        eprintln!("usage: herdr pane report-metadata <pane_id> --source ID [--agent LABEL] [--applies-to-source ID] [--title TEXT|--clear-title] [--display-agent TEXT|--clear-display-agent] [--custom-status TEXT|--clear-custom-status] [--state-label STATUS=TEXT] [--clear-state-labels] [--seq N] [--ttl-ms N]");
+        eprintln!("usage: herdr pane report-metadata <pane_id> --source ID [--agent LABEL] [--applies-to-source ID] [--title TEXT|--clear-title] [--display-agent TEXT|--clear-display-agent] [--custom-status TEXT|--clear-custom-status] [--marker TEXT|--clear-marker] [--state-label STATUS=TEXT] [--clear-state-labels] [--seq N] [--ttl-ms N]");
         return Ok(2);
     };
 
@@ -1235,10 +1235,12 @@ fn pane_report_metadata(args: &[String]) -> std::io::Result<i32> {
     let mut title = None;
     let mut display_agent = None;
     let mut custom_status = None;
+    let mut marker = None;
     let mut state_labels = std::collections::HashMap::new();
     let mut clear_title = false;
     let mut clear_display_agent = false;
     let mut clear_custom_status = false;
+    let mut clear_marker = false;
     let mut clear_state_labels = false;
     let mut seq = None;
     let mut ttl_ms = None;
@@ -1306,6 +1308,18 @@ fn pane_report_metadata(args: &[String]) -> std::io::Result<i32> {
                 clear_custom_status = true;
                 index += 1;
             }
+            "--marker" => {
+                let Some(value) = args.get(index + 1) else {
+                    eprintln!("missing value for --marker");
+                    return Ok(2);
+                };
+                marker = Some(value.clone());
+                index += 2;
+            }
+            "--clear-marker" => {
+                clear_marker = true;
+                index += 1;
+            }
             "--state-label" => {
                 let Some(value) = args.get(index + 1) else {
                     eprintln!("missing value for --state-label");
@@ -1370,6 +1384,7 @@ fn pane_report_metadata(args: &[String]) -> std::io::Result<i32> {
     if title.is_some() && clear_title
         || display_agent.is_some() && clear_display_agent
         || custom_status.is_some() && clear_custom_status
+        || marker.is_some() && clear_marker
         || !state_labels.is_empty() && clear_state_labels
     {
         eprintln!("cannot set and clear the same metadata field");
@@ -1378,10 +1393,12 @@ fn pane_report_metadata(args: &[String]) -> std::io::Result<i32> {
     if title.is_none()
         && display_agent.is_none()
         && custom_status.is_none()
+        && marker.is_none()
         && state_labels.is_empty()
         && !clear_title
         && !clear_display_agent
         && !clear_custom_status
+        && !clear_marker
         && !clear_state_labels
     {
         eprintln!("missing metadata field to set or clear");
@@ -1396,10 +1413,12 @@ fn pane_report_metadata(args: &[String]) -> std::io::Result<i32> {
         title,
         display_agent,
         custom_status,
+        marker,
         state_labels,
         clear_title,
         clear_display_agent,
         clear_custom_status,
+        clear_marker,
         clear_state_labels,
         seq,
         ttl_ms,
@@ -1436,7 +1455,7 @@ fn print_pane_help() {
     eprintln!("  herdr pane report-agent <pane_id> --source ID --agent LABEL --state idle|working|blocked|unknown [--message TEXT] [--custom-status TEXT] [--seq N] [--agent-session-id ID] [--agent-session-path PATH]");
     eprintln!("  herdr pane report-agent-session <pane_id> --source ID --agent LABEL [--seq N] [--agent-session-id ID] [--agent-session-path PATH]");
     eprintln!("  herdr pane release-agent <pane_id> --source ID --agent LABEL [--seq N]");
-    eprintln!("  herdr pane report-metadata <pane_id> --source ID [--agent LABEL] [--applies-to-source ID] [--title TEXT|--clear-title] [--display-agent TEXT|--clear-display-agent] [--custom-status TEXT|--clear-custom-status] [--state-label STATUS=TEXT] [--clear-state-labels] [--seq N] [--ttl-ms N]");
+    eprintln!("  herdr pane report-metadata <pane_id> --source ID [--agent LABEL] [--applies-to-source ID] [--title TEXT|--clear-title] [--display-agent TEXT|--clear-display-agent] [--custom-status TEXT|--clear-custom-status] [--marker TEXT|--clear-marker] [--state-label STATUS=TEXT] [--clear-state-labels] [--seq N] [--ttl-ms N]");
     eprintln!("  herdr pane run <pane_id> <command>");
 }
 

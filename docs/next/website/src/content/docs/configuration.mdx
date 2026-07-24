@@ -326,6 +326,7 @@ hide_tab_bar_when_single_tab = false
 show_prefix_hint = true
 tab_number_prefix = false
 tab_agent_status = false
+tab_markers = true
 agent_panel_sort = "spaces"
 agent_panel_scope = "all"
 workspace_tab_label = "auto"
@@ -367,6 +368,8 @@ Set `show_prefix_hint = false` to hide the prefix hint bar that appears at the b
 Set `tab_number_prefix = true` to prefix each tab label in the tab bar with its position number, for example `1: main`. This makes the `prefix+1..9` switch keys easy to read on named tabs. Unnamed tabs already display their number, so they are left unchanged.
 
 Set `tab_agent_status = true` to show each tab's aggregate agent status at the end of the tab in the tab bar, using the same glyphs as the sidebar: an animated spinner for working, a red dot for blocked, and a teal dot for done. Quiet tabs (idle or without an agent) show nothing. When a tab has several agents, the highest-attention one wins (blocked, then done, then working). This makes it easy to see which tabs need attention when switching workspaces.
+
+Set `tab_markers = false` to hide agent-reported markers. Agents and scripts can set a short marker (an emoji or icon) on their pane with `herdr pane report-metadata "$HERDR_PANE_ID" --source build --marker "🔨"`, and clear it with `--clear-marker`. The marker appears in a fixed two-column slot just before the tab's agent status glyph, and on the workspace row in the expanded sidebar just after the color swatch. When several panes in a tab (or several tabs in a workspace) have markers, the most recently reported one wins. Markers are display-only, are capped at two columns, support `--ttl-ms` to expire on their own, and are cleared on restart. Nothing is shown unless a marker is reported, so this is on by default.
 
 ## Notifications
 

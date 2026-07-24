@@ -83,6 +83,34 @@ pub(super) fn normalize_reported_agent_label(agent: &str) -> Option<String> {
     Some(trimmed.to_string())
 }
 
+/// Markers render into a single fixed 2-column slot in the tab bar and sidebar,
+/// so they are capped server-side: every client gets the same guarantee and the
+/// UI never has to defend against an over-wide glyph shifting its geometry.
+pub(super) fn normalize_marker(marker: Option<String>) -> Option<String> {
+    const MAX_MARKER_WIDTH: usize = 2;
+    use unicode_width::UnicodeWidthStr;
+
+    let trimmed = marker?.trim().to_string();
+    let mut normalized = String::new();
+    // Width is measured on the accumulated string, not summed per character: a
+    // variation selector promotes its base character from one column to two, so
+    // per-character widths would under-count emoji presentation sequences.
+    for ch in trimmed.chars().filter(|ch| !ch.is_control()).take(32) {
+        let fits_len = normalized.len();
+        normalized.push(ch);
+        if UnicodeWidthStr::width(normalized.as_str()) > MAX_MARKER_WIDTH {
+            normalized.truncate(fits_len);
+            break;
+        }
+    }
+    // A zero-width joiner left dangling by truncation would render as a stray
+    // glyph. Variation selectors are kept: they carry emoji presentation.
+    while normalized.ends_with('\u{200d}') {
+        normalized.pop();
+    }
+    (!normalized.is_empty()).then_some(normalized)
+}
+
 pub(super) fn normalize_custom_status(status: Option<String>) -> Option<String> {
     let trimmed = status?.trim().to_string();
     let mut normalized = String::new();
@@ -90,4 +118,54 @@ pub(super) fn normalize_custom_status(status: Option<String>) -> Option<String> 
         normalized.push(ch);
     }
     (!normalized.trim().is_empty()).then(|| normalized.trim().to_string())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn normalize_marker_keeps_two_column_emoji() {
+        assert_eq!(normalize_marker(Some("🔨".into())), Some("🔨".into()));
+        // Variation selectors carry emoji presentation and must survive.
+        assert_eq!(normalize_marker(Some("⚠️".into())), Some("⚠️".into()));
+    }
+
+    #[test]
+    fn normalize_marker_trims_and_rejects_empty() {
+        assert_eq!(normalize_marker(Some("  ✅  ".into())), Some("✅".into()));
+        assert_eq!(normalize_marker(Some("   ".into())), None);
+        assert_eq!(normalize_marker(None), None);
+    }
+
+    #[test]
+    fn normalize_marker_strips_control_chars() {
+        assert_eq!(normalize_marker(Some("\u{7}✅".into())), Some("✅".into()));
+        assert_eq!(normalize_marker(Some("a\nb".into())), Some("ab".into()));
+    }
+
+    #[test]
+    fn normalize_marker_caps_at_two_display_columns() {
+        use unicode_width::UnicodeWidthStr;
+
+        // Two 2-column emoji: only the first fits the slot.
+        assert_eq!(normalize_marker(Some("🔨✅".into())), Some("🔨".into()));
+        // Four 1-column chars truncate to two.
+        assert_eq!(normalize_marker(Some("abcd".into())), Some("ab".into()));
+
+        for input in ["🔨✅", "abcd", "🔨a", "⚠️⚠️"] {
+            let normalized = normalize_marker(Some(input.into())).unwrap();
+            assert!(
+                UnicodeWidthStr::width(normalized.as_str()) <= 2,
+                "{input:?} normalized to {normalized:?} which is wider than the slot"
+            );
+        }
+    }
+
+    #[test]
+    fn normalize_marker_drops_dangling_zero_width_joiner() {
+        // A ZWJ sequence truncated mid-cluster must not keep a trailing joiner.
+        let normalized = normalize_marker(Some("👨\u{200d}👩\u{200d}👧".into())).unwrap();
+        assert!(!normalized.ends_with('\u{200d}'), "{normalized:?}");
+    }
 }
