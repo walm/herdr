@@ -980,6 +980,14 @@ fn render_workspace_list(
                 Style::default().fg(p.workspace_color(color)),
             ));
         }
+        // Marker of the most recently marked tab in this workspace, after the
+        // color swatch.
+        if app.tab_markers {
+            if let Some((marker, _)) = ws.aggregate_marker(&app.terminals) {
+                line1.push(Span::styled(" ", Style::default()));
+                line1.push(Span::styled(marker, Style::default()));
+            }
+        }
 
         frame.render_widget(
             Paragraph::new(Line::from(line1)),

@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::time::Instant;
 
 use crate::detect::{Agent, AgentState};
 use crate::layout::PaneId;
@@ -47,6 +48,22 @@ impl Tab {
             })
             .max_by_key(|(state, seen)| pane_attention_priority(*state, *seen))
             .unwrap_or((AgentState::Unknown, true))
+    }
+
+    /// Marker of the most recently marked pane in this tab, with its report
+    /// time. The timestamp travels up so a workspace can rank across its tabs.
+    pub fn aggregate_marker(
+        &self,
+        terminals: &HashMap<TerminalId, TerminalState>,
+    ) -> Option<(String, Instant)> {
+        self.panes
+            .values()
+            .filter_map(|pane| {
+                terminals
+                    .get(&pane.attached_terminal_id)
+                    .and_then(|terminal| terminal.effective_marker_at())
+            })
+            .max_by_key(|(_, reported_at)| *reported_at)
     }
 
     fn pane_details(
@@ -114,6 +131,17 @@ impl Workspace {
         self.tabs.iter().any(|tab| tab.has_working_pane(terminals))
     }
 
+    /// Marker of the most recently marked tab in this workspace.
+    pub fn aggregate_marker(
+        &self,
+        terminals: &HashMap<TerminalId, TerminalState>,
+    ) -> Option<(String, Instant)> {
+        self.tabs
+            .iter()
+            .filter_map(|tab| tab.aggregate_marker(terminals))
+            .max_by_key(|(_, reported_at)| *reported_at)
+    }
+
     pub fn pane_details(&self, terminals: &HashMap<TerminalId, TerminalState>) -> Vec<PaneDetail> {
         let multi_tab = self.tabs.len() > 1;
         self.tabs
@@ -144,6 +172,87 @@ mod tests {
 
     fn terminal_for_pane(ws: &Workspace, pane_id: PaneId) -> TerminalState {
         TerminalState::new(ws.terminal_id(pane_id).unwrap().clone(), "/tmp".into())
+    }
+
+    fn set_marker(terminal: &mut TerminalState, source: &str, marker: &str) {
+        terminal.set_agent_metadata(crate::terminal::AgentMetadataReport {
+            source: source.into(),
+            agent_label: None,
+            applies_to_source: None,
+            title: None,
+            display_agent: None,
+            custom_status: None,
+            marker: Some(marker.into()),
+            state_labels: HashMap::new(),
+            clear_title: false,
+            clear_display_agent: false,
+            clear_custom_status: false,
+            clear_marker: false,
+            clear_state_labels: false,
+            ttl: None,
+            seq: None,
+        });
+    }
+
+    #[test]
+    fn tab_aggregate_marker_is_none_without_markers() {
+        let ws = Workspace::test_new("test");
+        let mut terminals = HashMap::new();
+        let root = ws.tabs[0].root_pane;
+        let terminal = terminal_for_pane(&ws, root);
+        terminals.insert(terminal.id.clone(), terminal);
+
+        assert!(ws.tabs[0].aggregate_marker(&terminals).is_none());
+        assert!(ws.aggregate_marker(&terminals).is_none());
+    }
+
+    #[test]
+    fn tab_aggregate_marker_prefers_most_recently_marked_pane() {
+        let mut ws = Workspace::test_new("test");
+        let id2 = ws.test_split(Direction::Horizontal);
+        let root_id = ws.tabs[0]
+            .panes
+            .keys()
+            .find(|id| **id != id2)
+            .copied()
+            .unwrap();
+        let mut terminals = HashMap::new();
+
+        let mut root_terminal = terminal_for_pane(&ws, root_id);
+        set_marker(&mut root_terminal, "first", "🔨");
+        terminals.insert(root_terminal.id.clone(), root_terminal);
+
+        // Reported after the root pane, so this marker is the newer one.
+        let mut second_terminal = terminal_for_pane(&ws, id2);
+        set_marker(&mut second_terminal, "second", "✅");
+        terminals.insert(second_terminal.id.clone(), second_terminal);
+
+        let (marker, _) = ws.tabs[0].aggregate_marker(&terminals).unwrap();
+        assert_eq!(marker, "✅");
+
+        // The workspace ranks across tabs and sees the same winner here.
+        let (ws_marker, _) = ws.aggregate_marker(&terminals).unwrap();
+        assert_eq!(ws_marker, "✅");
+    }
+
+    #[test]
+    fn workspace_aggregate_marker_prefers_most_recently_marked_tab() {
+        let mut ws = Workspace::test_new("test");
+        ws.test_add_tab(None);
+        let first_pane = ws.tabs[0].root_pane;
+        let second_pane = ws.tabs[1].root_pane;
+        let mut terminals = HashMap::new();
+
+        let mut first_terminal = terminal_for_pane(&ws, first_pane);
+        set_marker(&mut first_terminal, "first", "🔨");
+        terminals.insert(first_terminal.id.clone(), first_terminal);
+
+        let mut second_terminal = terminal_for_pane(&ws, second_pane);
+        set_marker(&mut second_terminal, "second", "⚠");
+        terminals.insert(second_terminal.id.clone(), second_terminal);
+
+        let (marker, _) = ws.aggregate_marker(&terminals).unwrap();
+        assert_eq!(marker, "⚠");
     }
 
     #[test]

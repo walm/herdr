@@ -151,7 +151,7 @@ pub(crate) const APP_EVENT_DRAIN_LIMIT: usize = 64;
 
 pub(crate) enum LoopEvent {
     Timer,
-    Internal(AppEvent),
+    Internal(Box<AppEvent>),
     Api(Box<crate::api::ApiRequestMessage>),
     RawInput(crate::raw_input::RawInputEvent),
     InputClosed,
@@ -637,6 +637,7 @@ impl App {
             show_prefix_hint: config.ui.show_prefix_hint,
             tab_number_prefix: config.ui.tab_number_prefix,
             tab_agent_status: config.ui.tab_agent_status,
+            tab_markers: config.ui.tab_markers,
             pane_history_persistence: config.experimental.pane_history,
             reveal_hidden_cursor_for_cjk_ime: config.experimental.reveal_hidden_cursor_for_cjk_ime,
             cjk_ime_agent_filter_configured: !config.experimental.cjk_ime_agents.is_empty(),
@@ -1080,7 +1081,7 @@ impl App {
                         None => LoopEvent::Timer,
                     },
                     maybe_ev = self.event_rx.recv() => match maybe_ev {
-                        Some(ev) => LoopEvent::Internal(ev),
+                        Some(ev) => LoopEvent::Internal(Box::new(ev)),
                         None => LoopEvent::Timer,
                     },
                     maybe_input = recv_raw_input_or_pending(input_rx) => match maybe_input {
@@ -1095,7 +1096,7 @@ impl App {
             match event {
                 LoopEvent::Timer => {}
                 LoopEvent::Internal(ev) => {
-                    self.handle_internal_event_with_prefix_sync(ev);
+                    self.handle_internal_event_with_prefix_sync(*ev);
                     needs_render = true;
                 }
                 LoopEvent::Api(msg) => {
@@ -1414,6 +1415,7 @@ impl App {
                 self.state.show_prefix_hint = config.ui.show_prefix_hint;
                 self.state.tab_number_prefix = config.ui.tab_number_prefix;
                 self.state.tab_agent_status = config.ui.tab_agent_status;
+                self.state.tab_markers = config.ui.tab_markers;
                 self.state.agent_panel_sort =
                     agent_panel_sort_from_config(config.ui.agent_panel_sort);
                 self.state.agent_panel_scope =

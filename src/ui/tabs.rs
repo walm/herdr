@@ -13,6 +13,9 @@ use crate::app::AppState;
 use crate::detect::AgentState;
 
 const MIN_TAB_WIDTH: u16 = 8;
+/// Markers render into a fixed 2-column slot; the API caps reported markers to
+/// the same width so a wide glyph can never shift tab geometry.
+const MARKER_SLOT_WIDTH: u16 = 2;
 const MAX_WORKSPACE_LABEL_WIDTH: usize = 24;
 
 /// The workspace-name label shown at the right of the tab bar, if enabled.
@@ -407,6 +410,31 @@ pub(super) fn render_tab_bar(app: &AppState, frame: &mut Frame, area: Rect) {
         let text = format!(" {:width$}", name, width = width.saturating_sub(1));
         frame.render_widget(Paragraph::new(text).style(style), rect);
 
+        // Agent/CLI-reported marker in a fixed 2-column slot immediately left of
+        // the status glyph. Like the glyph it is drawn into the existing trailing
+        // padding, so tab widths and hit areas are unchanged. The most recently
+        // marked pane in the tab wins.
+        if app.tab_markers {
+            if let Some((marker, _)) = tab.aggregate_marker(&app.terminals) {
+                let name_width = display_width_u16(&name);
+                // Reserve the glyph cell only while that feature is on, so the
+                // marker sits flush right when it is the only trailing glyph and
+                // does not shift as agent state changes.
+                let glyph_reserve = if app.tab_agent_status { 1 } else { 0 };
+                let slot_start = rect
+                    .width
+                    .saturating_sub(1 + glyph_reserve + MARKER_SLOT_WIDTH);
+                if slot_start >= name_width.saturating_add(2) {
+                    let marker_bg = if active { p.accent } else { p.surface0 };
+                    let marker_rect = Rect::new(rect.x + slot_start, rect.y, MARKER_SLOT_WIDTH, 1);
+                    frame.render_widget(
+                        Paragraph::new(marker).style(Style::default().bg(marker_bg)),
+                        marker_rect,
+                    );
+                }
+            }
+        }
+
         // Aggregate agent status glyph at the tab's trailing edge. Drawn into the
         // existing trailing padding (no width change) so hit areas stay aligned;
         // only shown for attention states (working / blocked / done).
@@ -562,6 +590,79 @@ mod tests {
             .draw(|frame| render_tab_bar(app, frame, app.view.tab_bar_rect))
             .unwrap();
         buffer_row_text(terminal.backend().buffer(), app.view.tab_bar_rect, 0)
+    }
+
+    #[test]
+    fn tab_markers_render_and_respect_the_toggle() {
+        let mut app = AppState::test_new();
+        let ws = Workspace::test_new("test");
+        let pane = ws.tabs[0].root_pane;
+        app.workspaces = vec![ws];
+        app.ensure_test_terminals();
+        app.tab_markers = true;
+        app.tab_agent_status = false;
+        app.active = Some(0);
+        app.view.tab_bar_rect = Rect::new(0, 0, 30, 1);
+        let view = compute_tab_bar_view(
+            &app.workspaces[0],
+            app.view.tab_bar_rect,
+            0,
+            true,
+            false,
+            false,
+            0,
+        );
+        app.view.tab_hit_areas = view.tab_hit_areas;
+
+        let terminal_id = app.workspaces[0].tabs[0].panes[&pane]
+            .attached_terminal_id
+            .clone();
+        app.terminals
+            .get_mut(&terminal_id)
+            .unwrap()
+            .set_agent_metadata(crate::terminal::AgentMetadataReport {
+                source: "build".into(),
+                agent_label: None,
+                applies_to_source: None,
+                title: None,
+                display_agent: None,
+                custom_status: None,
+                marker: Some("\u{1f528}".into()),
+                state_labels: std::collections::HashMap::new(),
+                clear_title: false,
+                clear_display_agent: false,
+                clear_custom_status: false,
+                clear_marker: false,
+                clear_state_labels: false,
+                ttl: None,
+                seq: None,
+            });
+
+        assert!(
+            tab_bar_row(&app).contains('\u{1f528}'),
+            "marker should render: {:?}",
+            tab_bar_row(&app)
+        );
+
+        // The marker draws into existing trailing padding, so the tab geometry
+        // used for hit testing is unchanged.
+        let with_marker = compute_tab_bar_view(
+            &app.workspaces[0],
+            app.view.tab_bar_rect,
+            0,
+            true,
+            false,
+            false,
+            0,
+        );
+        assert_eq!(with_marker.tab_hit_areas, app.view.tab_hit_areas);
+
+        app.tab_markers = false;
+        assert!(
+            !tab_bar_row(&app).contains('\u{1f528}'),
+            "toggled off: {:?}",
+            tab_bar_row(&app)
+        );
     }
 
     #[test]

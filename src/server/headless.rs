@@ -99,7 +99,7 @@ fn non_empty_body(value: &str) -> Option<String> {
 /// Events that the headless server event loop can process.
 enum LoopEvent {
     Timer,
-    Internal(AppEvent),
+    Internal(Box<AppEvent>),
     Api(Box<api::ApiRequestMessage>),
     ServerEvent(ServerEvent),
     RenderRequested,
@@ -557,7 +557,7 @@ impl HeadlessServer {
                         None => LoopEvent::Timer,
                     },
                     maybe_ev = self.app.event_rx.recv() => match maybe_ev {
-                        Some(ev) => LoopEvent::Internal(ev),
+                        Some(ev) => LoopEvent::Internal(Box::new(ev)),
                         None => LoopEvent::Timer,
                     },
                     maybe_server_ev = self.server_event_rx.recv() => match maybe_server_ev {
@@ -572,7 +572,7 @@ impl HeadlessServer {
             match event {
                 LoopEvent::Timer => {}
                 LoopEvent::Internal(ev) => {
-                    if self.handle_internal_event_with_forwarding(ev) {
+                    if self.handle_internal_event_with_forwarding(*ev) {
                         needs_render = true;
                         needs_full_render = true;
                     }
@@ -5445,10 +5445,12 @@ next_tab = ""
                 title: None,
                 display_agent: None,
                 custom_status: Some("short lived".into()),
+                marker: None,
                 state_labels: HashMap::new(),
                 clear_title: false,
                 clear_display_agent: false,
                 clear_custom_status: false,
+                clear_marker: false,
                 clear_state_labels: false,
                 seq: None,
                 ttl: Some(Duration::from_millis(1)),

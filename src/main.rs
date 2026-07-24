@@ -309,6 +309,11 @@ const DEFAULT_CONFIG: &str = r##"# herdr configuration
 # blocked, done). Quiet tabs (idle or no agent) show nothing.
 # tab_agent_status = false
 
+# Show agent/CLI-reported markers (set with `herdr pane report-metadata --marker`)
+# in the tab bar and on sidebar workspace rows. Nothing renders unless a marker
+# is reported.
+# tab_markers = true
+
 # Agent panel ordering: "spaces" (grouped by space) or "priority" (attention queue).
 # "workspaces" is accepted as an alias for "spaces".
 # agent_panel_sort = "spaces"

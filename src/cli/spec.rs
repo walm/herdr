@@ -506,6 +506,8 @@ fn report_metadata_command() -> Command {
         .arg(flag("clear-display-agent"))
         .arg(option("custom-status", "TEXT"))
         .arg(flag("clear-custom-status"))
+        .arg(option("marker", "TEXT"))
+        .arg(flag("clear-marker"))
         .arg(option("state-label", "STATUS=TEXT"))
         .arg(flag("clear-state-labels"))
         .arg(option("seq", "N"))
