@@ -3,9 +3,11 @@ use std::collections::HashMap;
 use crate::api::schema::{WorkspaceCreateParams, WorkspaceRenameParams};
 
 pub(super) fn run_workspace_command(args: &[String]) -> std::io::Result<i32> {
+    if let Some(code) = super::help::intercept(&["workspace"], args) {
+        return Ok(code);
+    }
     let Some(subcommand) = args.first().map(|arg| arg.as_str()) else {
-        print_workspace_help();
-        return Ok(2);
+        return Ok(super::help::usage_error(&["workspace"]));
     };
 
     match subcommand {
@@ -15,14 +17,11 @@ pub(super) fn run_workspace_command(args: &[String]) -> std::io::Result<i32> {
         "focus" => workspace_focus(&args[1..]),
         "rename" => workspace_rename(&args[1..]),
         "close" => workspace_close(&args[1..]),
-        "help" | "--help" | "-h" => {
-            print_workspace_help();
-            Ok(0)
-        }
-        _ => {
-            print_workspace_help();
-            Ok(2)
-        }
+        arg if super::help::help_mode(arg).is_some() => Ok(super::help::print(
+            &["workspace"],
+            super::help::requested_mode(args),
+        )),
+        _ => Ok(super::help::usage_error(&["workspace"])),
     }
 }
 
@@ -147,14 +146,4 @@ fn workspace_close(args: &[String]) -> std::io::Result<i32> {
     }
 
     super::runtime::workspace_close(super::normalize_workspace_id(raw_workspace_id))
-}
-
-fn print_workspace_help() {
-    eprintln!("herdr workspace commands:");
-    eprintln!("  herdr workspace list");
-    eprintln!("  herdr workspace create [--cwd PATH] [--label TEXT] [--env KEY=VALUE] [--focus] [--no-focus]");
-    eprintln!("  herdr workspace get <workspace_id>");
-    eprintln!("  herdr workspace focus <workspace_id>");
-    eprintln!("  herdr workspace rename <workspace_id> <label>");
-    eprintln!("  herdr workspace close <workspace_id>");
 }

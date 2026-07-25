@@ -3,22 +3,21 @@ const API_SCHEMA_JSON: &str = include_str!("../../docs/next/api/herdr-api.schema
 use crate::api::schema::{EmptyParams, Method, Request};
 
 pub(super) fn run_api_command(args: &[String]) -> std::io::Result<i32> {
+    if let Some(code) = super::help::intercept(&["api"], args) {
+        return Ok(code);
+    }
     let Some(subcommand) = args.first().map(String::as_str) else {
-        print_api_help();
-        return Ok(2);
+        return Ok(super::help::usage_error(&["api"]));
     };
 
     match subcommand {
         "schema" => api_schema(&args[1..]),
         "snapshot" => api_snapshot(&args[1..]),
-        "help" | "--help" | "-h" => {
-            print_api_help();
-            Ok(0)
-        }
-        _ => {
-            print_api_help();
-            Ok(2)
-        }
+        arg if super::help::help_mode(arg).is_some() => Ok(super::help::print(
+            &["api"],
+            super::help::requested_mode(args),
+        )),
+        _ => Ok(super::help::usage_error(&["api"])),
     }
 }
 
@@ -38,16 +37,15 @@ fn api_schema(args: &[String]) -> std::io::Result<i32> {
             eprintln!("missing value for --output");
             return Ok(2);
         }
-        [flag] if matches!(flag.as_str(), "help" | "--help" | "-h") => {
-            print_api_schema_help();
+        [flag] if super::help::help_mode(flag).is_some() => {
+            super::help::print(&["api", "schema"], super::help::requested_mode(args));
         }
         [other] if other.starts_with('-') => {
             eprintln!("unknown option: {other}");
             return Ok(2);
         }
         _ => {
-            print_api_schema_help();
-            return Ok(2);
+            return Ok(super::help::usage_error(&["api", "schema"]));
         }
     }
     Ok(0)
@@ -94,16 +92,6 @@ fn schema_summary_text() -> std::io::Result<String> {
         schema_version,
         schemas.join(", ")
     ))
-}
-
-fn print_api_help() {
-    eprintln!("herdr api commands:");
-    eprintln!("  herdr api snapshot");
-    eprintln!("  herdr api schema [--json | --output PATH]");
-}
-
-fn print_api_schema_help() {
-    eprintln!("usage: herdr api schema [--json | --output PATH]");
 }
 
 #[cfg(test)]

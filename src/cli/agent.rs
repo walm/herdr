@@ -6,9 +6,11 @@ use crate::api::schema::{
 };
 
 pub(super) fn run_agent_command(args: &[String]) -> std::io::Result<i32> {
+    if let Some(code) = super::help::intercept(&["agent"], args) {
+        return Ok(code);
+    }
     let Some(subcommand) = args.first().map(|arg| arg.as_str()) else {
-        print_agent_help();
-        return Ok(2);
+        return Ok(super::help::usage_error(&["agent"]));
     };
 
     match subcommand {
@@ -22,14 +24,11 @@ pub(super) fn run_agent_command(args: &[String]) -> std::io::Result<i32> {
         "attach" => agent_attach(&args[1..]),
         "start" => agent_start(&args[1..]),
         "explain" => agent_explain(&args[1..]),
-        "help" | "--help" | "-h" => {
-            print_agent_help();
-            Ok(0)
-        }
-        _ => {
-            print_agent_help();
-            Ok(2)
-        }
+        arg if super::help::help_mode(arg).is_some() => Ok(super::help::print(
+            &["agent"],
+            super::help::requested_mode(args),
+        )),
+        _ => Ok(super::help::usage_error(&["agent"])),
     }
 }
 
@@ -82,12 +81,11 @@ fn agent_explain(args: &[String]) -> std::io::Result<i32> {
                 verbose = true;
                 index += 1;
             }
-            "help" | "--help" | "-h" => {
-                eprintln!("usage: herdr agent explain <target> [--json|--verbose]");
-                eprintln!(
-                    "usage: herdr agent explain --file PATH --agent LABEL [--json|--verbose]"
-                );
-                return Ok(0);
+            arg if super::help::help_mode(arg).is_some() => {
+                return Ok(super::help::print(
+                    &["agent", "explain"],
+                    super::help::requested_mode(args),
+                ));
             }
             value if value.starts_with('-') => {
                 eprintln!("unknown option: {value}");
@@ -418,11 +416,10 @@ fn agent_focus(args: &[String]) -> std::io::Result<i32> {
 }
 
 fn agent_attach(args: &[String]) -> std::io::Result<i32> {
-    let (target, takeover) =
-        match super::parse_attach_target(args, "usage: herdr agent attach <target> [--takeover]") {
-            Ok(parsed) => parsed,
-            Err(code) => return Ok(code),
-        };
+    let (target, takeover) = match super::parse_attach_target(args, &["agent", "attach"]) {
+        Ok(parsed) => parsed,
+        Err(code) => return Ok(code),
+    };
 
     let response = resolve_agent_target(&target, "cli:agent:attach:resolve")?;
     if response.get("error").is_some() {
@@ -465,9 +462,11 @@ fn agent_wait(args: &[String]) -> std::io::Result<i32> {
                 timeout_ms = Some(super::parse_u64_flag("--timeout", value)?);
                 index += 2;
             }
-            "help" | "--help" | "-h" => {
-                eprintln!("usage: herdr agent wait <target> --status <idle|working|blocked|unknown> [--timeout MS]");
-                return Ok(0);
+            arg if super::help::help_mode(arg).is_some() => {
+                return Ok(super::help::print(
+                    &["agent", "wait"],
+                    super::help::requested_mode(args),
+                ));
             }
             other => {
                 eprintln!("unknown option: {other}");
@@ -663,23 +662,4 @@ fn parse_agent_wait_status(value: &str) -> std::io::Result<AgentStatus> {
             "invalid agent status: {value} (expected idle, working, blocked, or unknown)"
         ))),
     }
-}
-
-fn print_agent_help() {
-    eprintln!("herdr agent commands:");
-    eprintln!("  herdr agent list");
-    eprintln!("  herdr agent get <target>");
-    eprintln!("  herdr agent read <target> [--source visible|recent|recent-unwrapped] [--lines N] [--format text|ansi] [--ansi]");
-    eprintln!("  herdr agent send <target> <text>");
-    eprintln!("  herdr agent rename <target> <name>|--clear");
-    eprintln!("  herdr agent focus <target>");
-    eprintln!("  herdr agent wait <target> --status <idle|working|blocked|unknown> [--timeout MS]");
-    eprintln!("  herdr agent attach <target> [--takeover]");
-    eprintln!("  herdr agent start <name> [--cwd PATH] [--workspace ID] [--tab ID] [--split right|down] [--env KEY=VALUE] [--focus|--no-focus] -- <argv...>");
-    eprintln!("  herdr agent explain <target> [--json]");
-    eprintln!("  herdr agent explain --file PATH --agent LABEL [--json]");
-    eprintln!("  targets accept terminal ids, unique agent names, detected/reported agent labels, and legacy pane ids");
-    eprintln!(
-        "  agent send writes literal text; use pane run when you want command text plus Enter"
-    );
 }

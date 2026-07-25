@@ -13,6 +13,53 @@ use crate::api::schema::{
 mod agent;
 mod api;
 mod completion;
+mod help;
+
+/// Command paths the dispatcher renders help for. Kept beside the dispatch so a
+/// test can assert each one still resolves in the spec (see `help::tests`).
+/// Renders the root `herdr --help`/`-h` from the spec.
+///
+/// Returns `None` when help was not requested. The caller appends
+/// runtime-derived context (config and log paths) that the static spec cannot
+/// know.
+pub(crate) fn print_root_help(args: &[String]) -> Option<i32> {
+    let mode = args.iter().find_map(|arg| help::help_mode(arg))?;
+    Some(help::print(&[], mode))
+}
+
+#[cfg(test)]
+pub(super) const HELP_PATHS: &[&[&str]] = &[
+    &[],
+    &["channel"],
+    &["completion"],
+    &["config"],
+    &["status"],
+    &["server"],
+    &["api"],
+    &["api", "schema"],
+    &["workspace"],
+    &["worktree"],
+    &["tab"],
+    &["notification"],
+    &["agent"],
+    &["agent", "attach"],
+    &["agent", "explain"],
+    &["agent", "wait"],
+    &["pane"],
+    &["wait"],
+    &["terminal"],
+    &["terminal", "attach"],
+    &["terminal", "title"],
+    &["terminal", "session"],
+    &["terminal", "session", "control"],
+    &["terminal", "session", "observe"],
+    &["session"],
+    &["session", "attach"],
+    &["integration"],
+    &["plugin"],
+    &["plugin", "action"],
+    &["plugin", "pane"],
+];
 mod integration;
 mod notification;
 mod pane;
@@ -24,11 +71,6 @@ mod status;
 mod tab;
 mod workspace;
 mod worktree;
-
-const TERMINAL_SESSION_OBSERVE_USAGE: &str =
-    "usage: herdr terminal session observe <target> [--cols N] [--rows N]";
-const TERMINAL_SESSION_CONTROL_USAGE: &str =
-    "usage: herdr terminal session control <target> [--takeover] [--cols N] [--rows N]";
 
 pub(crate) fn parse_env_assignment(raw: &str) -> Result<(String, String), String> {
     let Some((key, value)) = raw.split_once('=') else {
@@ -90,14 +132,10 @@ fn run_channel_command(args: &[String]) -> std::io::Result<i32> {
             println!("{}", config.update.channel.as_str());
             Ok(0)
         }
-        Some("help" | "--help" | "-h") => {
-            print_channel_help();
-            Ok(0)
+        Some(arg) if help::help_mode(arg).is_some() => {
+            Ok(help::print(&["channel"], help::requested_mode(args)))
         }
-        _ => {
-            print_channel_help();
-            Ok(2)
-        }
+        _ => Ok(help::usage_error(&["channel"])),
     }
 }
 
@@ -211,28 +249,20 @@ fn channel_set_install_action(
     }
 }
 
-fn print_channel_help() {
-    eprintln!("herdr channel commands:");
-    eprintln!("  herdr channel show                  print the configured update channel");
-    eprintln!("  herdr channel set <stable|preview>  choose the update channel");
-}
-
 fn run_config_command(args: &[String]) -> std::io::Result<i32> {
+    if let Some(code) = help::intercept(&["config"], args) {
+        return Ok(code);
+    }
     let Some(subcommand) = args.first().map(|arg| arg.as_str()) else {
-        print_config_help();
-        return Ok(2);
+        return Ok(help::usage_error(&["config"]));
     };
 
     match subcommand {
         "reset-keys" => config_reset_keys(&args[1..]),
-        "help" | "--help" | "-h" => {
-            print_config_help();
-            Ok(0)
+        arg if help::help_mode(arg).is_some() => {
+            Ok(help::print(&["config"], help::requested_mode(args)))
         }
-        _ => {
-            print_config_help();
-            Ok(2)
-        }
+        _ => Ok(help::usage_error(&["config"])),
     }
 }
 
@@ -326,50 +356,48 @@ fn key_config_backup_path(path: &std::path::Path) -> std::path::PathBuf {
 }
 
 fn run_terminal_command(args: &[String]) -> std::io::Result<i32> {
+    if let Some(code) = help::intercept(&["terminal"], args) {
+        return Ok(code);
+    }
     let Some(subcommand) = args.first().map(|arg| arg.as_str()) else {
-        print_terminal_help();
-        return Ok(2);
+        return Ok(help::usage_error(&["terminal"]));
     };
 
     match subcommand {
         "attach" => terminal_attach(&args[1..]),
         "session" => terminal_session(&args[1..]),
         "title" => terminal_title(&args[1..]),
-        "help" | "--help" | "-h" => {
-            print_terminal_help();
-            Ok(0)
+        arg if help::help_mode(arg).is_some() => {
+            Ok(help::print(&["terminal"], help::requested_mode(args)))
         }
-        _ => {
-            print_terminal_help();
-            Ok(2)
-        }
+        _ => Ok(help::usage_error(&["terminal"])),
     }
 }
 
 fn run_wait_command(args: &[String]) -> std::io::Result<i32> {
+    if let Some(code) = help::intercept(&["wait"], args) {
+        return Ok(code);
+    }
     let Some(subcommand) = args.first().map(|arg| arg.as_str()) else {
-        print_wait_help();
-        return Ok(2);
+        return Ok(help::usage_error(&["wait"]));
     };
 
     match subcommand {
         "output" => wait_output(&args[1..]),
         "agent-status" => wait_agent_status(&args[1..]),
-        "help" | "--help" | "-h" => {
-            print_wait_help();
-            Ok(0)
+        arg if help::help_mode(arg).is_some() => {
+            Ok(help::print(&["wait"], help::requested_mode(args)))
         }
-        _ => {
-            print_wait_help();
-            Ok(2)
-        }
+        _ => Ok(help::usage_error(&["wait"])),
     }
 }
 
 fn run_session_command(args: &[String]) -> std::io::Result<i32> {
+    if let Some(code) = help::intercept(&["session"], args) {
+        return Ok(code);
+    }
     let Some(subcommand) = args.first().map(|arg| arg.as_str()) else {
-        print_session_help();
-        return Ok(2);
+        return Ok(help::usage_error(&["session"]));
     };
 
     match subcommand {
@@ -377,27 +405,23 @@ fn run_session_command(args: &[String]) -> std::io::Result<i32> {
         "attach" => session_attach_help(&args[1..]),
         "stop" => session_stop(&args[1..]),
         "delete" => session_delete(&args[1..]),
-        "help" | "--help" | "-h" => {
-            print_session_help();
-            Ok(0)
+        arg if help::help_mode(arg).is_some() => {
+            Ok(help::print(&["session"], help::requested_mode(args)))
         }
-        _ => {
-            print_session_help();
-            Ok(2)
-        }
+        _ => Ok(help::usage_error(&["session"])),
     }
 }
 
 fn session_attach_help(args: &[String]) -> std::io::Result<i32> {
-    if matches!(
-        args.first().map(String::as_str),
-        Some("help" | "--help" | "-h")
-    ) {
-        eprintln!("usage: herdr session attach <name>");
-        return Ok(0);
+    if let Some(arg) = args.first() {
+        if help::help_mode(arg).is_some() {
+            return Ok(help::print(
+                &["session", "attach"],
+                help::requested_mode(args),
+            ));
+        }
     }
-    eprintln!("usage: herdr session attach <name>");
-    Ok(2)
+    Ok(help::usage_error(&["session", "attach"]))
 }
 
 fn session_list(args: &[String]) -> std::io::Result<i32> {
@@ -477,10 +501,7 @@ fn session_delete(args: &[String]) -> std::io::Result<i32> {
 }
 
 fn terminal_attach(args: &[String]) -> std::io::Result<i32> {
-    let (terminal_id, takeover) = match parse_attach_target(
-        args,
-        "usage: herdr terminal attach <terminal_id> [--takeover]",
-    ) {
+    let (terminal_id, takeover) = match parse_attach_target(args, &["terminal", "attach"]) {
         Ok(parsed) => parsed,
         Err(code) => return Ok(code),
     };
@@ -489,26 +510,24 @@ fn terminal_attach(args: &[String]) -> std::io::Result<i32> {
 }
 
 fn terminal_session(args: &[String]) -> std::io::Result<i32> {
+    if let Some(code) = help::intercept(&["terminal", "session"], args) {
+        return Ok(code);
+    }
     match args.first().map(|arg| arg.as_str()) {
         Some("control") => terminal_session_control(&args[1..]),
         Some("observe") => terminal_session_observe(&args[1..]),
-        Some("help" | "--help" | "-h") => {
-            eprintln!("{TERMINAL_SESSION_CONTROL_USAGE}");
-            eprintln!("{TERMINAL_SESSION_OBSERVE_USAGE}");
-            Ok(0)
-        }
-        _ => {
-            eprintln!("{TERMINAL_SESSION_CONTROL_USAGE}");
-            eprintln!("{TERMINAL_SESSION_OBSERVE_USAGE}");
-            Ok(2)
-        }
+        Some(arg) if help::help_mode(arg).is_some() => Ok(help::print(
+            &["terminal", "session"],
+            help::requested_mode(args),
+        )),
+        _ => Ok(help::usage_error(&["terminal", "session"])),
     }
 }
 
 fn terminal_session_control(args: &[String]) -> std::io::Result<i32> {
     let options = match parse_terminal_session_options(
         args,
-        TERMINAL_SESSION_CONTROL_USAGE,
+        &["terminal", "session", "control"],
         "control",
         true,
     )? {
@@ -528,7 +547,7 @@ fn terminal_session_control(args: &[String]) -> std::io::Result<i32> {
 fn terminal_session_observe(args: &[String]) -> std::io::Result<i32> {
     let options = match parse_terminal_session_options(
         args,
-        TERMINAL_SESSION_OBSERVE_USAGE,
+        &["terminal", "session", "observe"],
         "observe",
         false,
     )? {
@@ -549,20 +568,17 @@ struct TerminalSessionOptions {
 
 fn parse_terminal_session_options(
     args: &[String],
-    usage: &str,
+    help_path: &[&str],
     command: &str,
     allow_takeover: bool,
 ) -> std::io::Result<Result<TerminalSessionOptions, i32>> {
-    if matches!(
-        args.first().map(|arg| arg.as_str()),
-        Some("help" | "--help" | "-h")
-    ) {
-        eprintln!("{usage}");
-        return Ok(Err(0));
+    if let Some(arg) = args.first() {
+        if help::help_mode(arg).is_some() {
+            return Ok(Err(help::print(help_path, help::requested_mode(args))));
+        }
     }
     let Some(target) = args.first() else {
-        eprintln!("{usage}");
-        return Ok(Err(2));
+        return Ok(Err(help::usage_error(help_path)));
     };
 
     let mut cols = 120;
@@ -577,28 +593,24 @@ fn parse_terminal_session_options(
             }
             "--cols" => {
                 let Some(value) = args.get(i + 1) else {
-                    eprintln!("{usage}");
-                    return Ok(Err(2));
+                    return Ok(Err(help::usage_error(help_path)));
                 };
                 cols = parse_terminal_dimension(value, "--cols")?;
                 i += 2;
             }
             "--rows" => {
                 let Some(value) = args.get(i + 1) else {
-                    eprintln!("{usage}");
-                    return Ok(Err(2));
+                    return Ok(Err(help::usage_error(help_path)));
                 };
                 rows = parse_terminal_dimension(value, "--rows")?;
                 i += 2;
             }
-            "help" | "--help" | "-h" => {
-                eprintln!("{usage}");
-                return Ok(Err(0));
+            arg if help::help_mode(arg).is_some() => {
+                return Ok(Err(help::print(help_path, help::requested_mode(args))));
             }
             other => {
                 eprintln!("unknown terminal session {command} option: {other}");
-                eprintln!("{usage}");
-                return Ok(Err(2));
+                return Ok(Err(help::usage_error(help_path)));
             }
         }
     }
@@ -628,6 +640,9 @@ fn parse_terminal_dimension(raw: &str, flag: &str) -> std::io::Result<u16> {
 }
 
 fn terminal_title(args: &[String]) -> std::io::Result<i32> {
+    if let Some(code) = help::intercept(&["terminal", "title"], args) {
+        return Ok(code);
+    }
     match args.first().map(|arg| arg.as_str()) {
         Some("set") => {
             if args.len() != 2 {
@@ -651,31 +666,30 @@ fn terminal_title(args: &[String]) -> std::io::Result<i32> {
                 method: Method::ClientWindowTitleClear(EmptyParams::default()),
             })?)
         }
-        Some("help" | "--help" | "-h") => {
-            eprintln!("usage: herdr terminal title set <title>");
-            eprintln!("       herdr terminal title clear");
-            Ok(0)
-        }
-        _ => {
-            eprintln!("usage: herdr terminal title set <title>");
-            eprintln!("       herdr terminal title clear");
-            Ok(2)
-        }
+        Some(arg) if help::help_mode(arg).is_some() => Ok(help::print(
+            &["terminal", "title"],
+            help::requested_mode(args),
+        )),
+        _ => Ok(help::usage_error(&["terminal", "title"])),
     }
 }
 
-pub(super) fn parse_attach_target(args: &[String], usage: &str) -> Result<(String, bool), i32> {
+pub(super) fn parse_attach_target(
+    args: &[String],
+    help_path: &[&str],
+) -> Result<(String, bool), i32> {
     let Some(target) = args.first() else {
-        eprintln!("{usage}");
-        return Err(2);
+        return Err(help::usage_error(help_path));
     };
+    if help::help_mode(target).is_some() {
+        return Err(help::print(help_path, help::requested_mode(args)));
+    }
     let mut takeover = false;
     for arg in &args[1..] {
         match arg.as_str() {
             "--takeover" => takeover = true,
-            "help" | "--help" | "-h" => {
-                eprintln!("{usage}");
-                return Err(0);
+            arg if help::help_mode(arg).is_some() => {
+                return Err(help::print(help_path, help::requested_mode(args)));
             }
             other => {
                 eprintln!("unknown option: {other}");
@@ -1115,38 +1129,6 @@ fn print_session_error(code: &str, message: &str) {
         }))
         .unwrap()
     );
-}
-
-fn print_config_help() {
-    eprintln!("herdr config commands:");
-    eprintln!("  herdr config reset-keys  back up config.toml and remove custom keybindings");
-}
-
-fn print_terminal_help() {
-    eprintln!("herdr terminal commands:");
-    eprintln!("  herdr terminal attach <terminal_id> [--takeover]");
-    eprintln!("  herdr terminal session control <target> [--takeover] [--cols N] [--rows N]");
-    eprintln!("  herdr terminal session observe <target> [--cols N] [--rows N]");
-    eprintln!("  herdr terminal title set <title>");
-    eprintln!("  herdr terminal title clear");
-    eprintln!("  detach from direct attach with ctrl+b q; send literal ctrl+b with ctrl+b ctrl+b");
-}
-
-fn print_wait_help() {
-    eprintln!("herdr wait commands:");
-    eprintln!("  herdr wait output <pane_id> --match <text> [--source visible|recent|recent-unwrapped] [--lines N] [--timeout MS] [--regex] [--raw]");
-    eprintln!(
-        "  herdr wait agent-status <pane_id> --status <idle|working|blocked|done|unknown> [--timeout MS]"
-    );
-}
-
-fn print_session_help() {
-    eprintln!("herdr session commands:");
-    eprintln!("  herdr session list [--json]");
-    eprintln!("  herdr session attach <name>");
-    eprintln!("  herdr session stop <name> [--json]");
-    eprintln!("  herdr session delete <name> [--json]");
-    eprintln!("  use 'default' as <name> to target the default session for stop");
 }
 
 fn _print_json<T: Serialize>(value: &T) {

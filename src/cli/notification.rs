@@ -2,21 +2,20 @@ use crate::api::schema::{Method, NotificationShowParams, NotificationShowSound, 
 use crate::config::ToastHerdrPosition;
 
 pub(super) fn run_notification_command(args: &[String]) -> std::io::Result<i32> {
+    if let Some(code) = super::help::intercept(&["notification"], args) {
+        return Ok(code);
+    }
     let Some(subcommand) = args.first().map(|arg| arg.as_str()) else {
-        print_notification_help();
-        return Ok(2);
+        return Ok(super::help::usage_error(&["notification"]));
     };
 
     match subcommand {
         "show" => notification_show(&args[1..]),
-        "help" | "--help" | "-h" => {
-            print_notification_help();
-            Ok(0)
-        }
-        _ => {
-            print_notification_help();
-            Ok(2)
-        }
+        arg if super::help::help_mode(arg).is_some() => Ok(super::help::print(
+            &["notification"],
+            super::help::requested_mode(args),
+        )),
+        _ => Ok(super::help::usage_error(&["notification"])),
     }
 }
 
@@ -129,13 +128,6 @@ fn parse_notification_sound(
             "invalid sound: {value} (expected none, done, or request)"
         ))),
     }
-}
-
-fn print_notification_help() {
-    eprintln!("herdr notification commands:");
-    eprintln!(
-        "  herdr notification show <title> [--body TEXT] [--position top-left|top-right|bottom-left|bottom-right] [--sound none|done|request]"
-    );
 }
 
 #[cfg(test)]

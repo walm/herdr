@@ -16,9 +16,11 @@ use crate::api::schema::{
 const PLUGIN_BUILD_OUTPUT_MAX_BYTES: usize = 64 * 1024;
 
 pub(super) fn run_plugin_command(args: &[String]) -> std::io::Result<i32> {
+    if let Some(code) = super::help::intercept(&["plugin"], args) {
+        return Ok(code);
+    }
     let Some(subcommand) = args.first().map(|arg| arg.as_str()) else {
-        print_plugin_help();
-        return Ok(2);
+        return Ok(super::help::usage_error(&["plugin"]));
     };
 
     match subcommand {
@@ -33,14 +35,11 @@ pub(super) fn run_plugin_command(args: &[String]) -> std::io::Result<i32> {
         "action" => run_plugin_action_command(&args[1..]),
         "log" | "logs" => plugin_log_list(&args[1..]),
         "pane" => run_plugin_pane_command(&args[1..]),
-        "help" | "--help" | "-h" => {
-            print_plugin_help();
-            Ok(0)
-        }
-        _ => {
-            print_plugin_help();
-            Ok(2)
-        }
+        arg if super::help::help_mode(arg).is_some() => Ok(super::help::print(
+            &["plugin"],
+            super::help::requested_mode(args),
+        )),
+        _ => Ok(super::help::usage_error(&["plugin"])),
     }
 }
 
@@ -375,22 +374,21 @@ fn plugin_log_list(args: &[String]) -> std::io::Result<i32> {
 }
 
 fn run_plugin_action_command(args: &[String]) -> std::io::Result<i32> {
+    if let Some(code) = super::help::intercept(&["plugin", "action"], args) {
+        return Ok(code);
+    }
     let Some(subcommand) = args.first().map(|arg| arg.as_str()) else {
-        print_plugin_action_help();
-        return Ok(2);
+        return Ok(super::help::usage_error(&["plugin", "action"]));
     };
 
     match subcommand {
         "list" => plugin_action_list(&args[1..]),
         "invoke" => plugin_action_invoke(&args[1..]),
-        "help" | "--help" | "-h" => {
-            print_plugin_action_help();
-            Ok(0)
-        }
-        _ => {
-            print_plugin_action_help();
-            Ok(2)
-        }
+        arg if super::help::help_mode(arg).is_some() => Ok(super::help::print(
+            &["plugin", "action"],
+            super::help::requested_mode(args),
+        )),
+        _ => Ok(super::help::usage_error(&["plugin", "action"])),
     }
 }
 
@@ -463,23 +461,22 @@ fn plugin_action_invoke(args: &[String]) -> std::io::Result<i32> {
 }
 
 fn run_plugin_pane_command(args: &[String]) -> std::io::Result<i32> {
+    if let Some(code) = super::help::intercept(&["plugin", "pane"], args) {
+        return Ok(code);
+    }
     let Some(subcommand) = args.first().map(|arg| arg.as_str()) else {
-        print_plugin_pane_help();
-        return Ok(2);
+        return Ok(super::help::usage_error(&["plugin", "pane"]));
     };
 
     match subcommand {
         "open" => plugin_pane_open(&args[1..]),
         "focus" => plugin_pane_focus(&args[1..]),
         "close" => plugin_pane_close(&args[1..]),
-        "help" | "--help" | "-h" => {
-            print_plugin_pane_help();
-            Ok(0)
-        }
-        _ => {
-            print_plugin_pane_help();
-            Ok(2)
-        }
+        arg if super::help::help_mode(arg).is_some() => Ok(super::help::print(
+            &["plugin", "pane"],
+            super::help::requested_mode(args),
+        )),
+        _ => Ok(super::help::usage_error(&["plugin", "pane"])),
     }
 }
 
@@ -1579,34 +1576,6 @@ fn print_plugin_response(method: Method) -> std::io::Result<i32> {
         id: "cli:plugin".into(),
         method,
     })?)
-}
-
-fn print_plugin_help() {
-    eprintln!("herdr plugin commands:");
-    eprintln!("  herdr plugin install <owner>/<repo>[/subdir...] [--ref REF] [--yes]");
-    eprintln!("  herdr plugin uninstall <plugin_id|owner/repo[/subdir...]>");
-    eprintln!("  herdr plugin link <path> [--disabled]");
-    eprintln!("  herdr plugin list [--plugin ID] [--json]");
-    eprintln!("  herdr plugin config-dir <plugin_id>");
-    eprintln!("  herdr plugin unlink <plugin_id>");
-    eprintln!("  herdr plugin enable <plugin_id>");
-    eprintln!("  herdr plugin disable <plugin_id>");
-    eprintln!("  herdr plugin action <list|invoke>");
-    eprintln!("  herdr plugin log list [--plugin ID] [--limit N]");
-    eprintln!("  herdr plugin pane <open|focus|close>");
-}
-
-fn print_plugin_action_help() {
-    eprintln!("herdr plugin action commands:");
-    eprintln!("  herdr plugin action list [--plugin ID]");
-    eprintln!("  herdr plugin action invoke <action_id> [--plugin ID]");
-}
-
-fn print_plugin_pane_help() {
-    eprintln!("herdr plugin pane commands:");
-    eprintln!("  herdr plugin pane open --plugin ID --entrypoint ID [--placement overlay|split|tab|zoomed] [--workspace ID] [--target-pane PANE] [--direction right|down] [--cwd PATH] [--env KEY=VALUE] [--focus|--no-focus]");
-    eprintln!("  herdr plugin pane focus <pane_id>");
-    eprintln!("  herdr plugin pane close <pane_id>");
 }
 
 #[cfg(test)]
