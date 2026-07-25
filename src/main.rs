@@ -518,120 +518,14 @@ fn main() -> io::Result<()> {
         }
     }
 
-    if args.iter().any(|a| a == "--help" || a == "-h") {
-        println!("herdr — terminal workspace manager for AI coding agents");
-        println!();
-        println!("Usage: herdr [options]");
-        println!("       herdr --session <name> [options]");
-        println!("       herdr --remote <ssh-target> [--session <name>]");
-        println!("       herdr session attach <name>");
-        println!("       herdr completion zsh");
-        println!("       herdr update [--handoff]");
-        println!("       herdr channel set <stable|preview>");
-        println!("       herdr server stop");
-        println!("       herdr server reload-config");
-        println!("       herdr api <subcommand> ...");
-        println!("       herdr completion <shell>");
-        println!("       herdr config <subcommand> ...");
-        println!("       herdr channel <subcommand> ...");
-        println!("       herdr workspace <subcommand> ...");
-        println!("       herdr worktree <subcommand> ...");
-        println!("       herdr tab <subcommand> ...");
-        println!("       herdr notification <subcommand> ...");
-        println!("       herdr agent <subcommand> ...");
-        println!("       herdr pane <subcommand> ...");
-        println!("       herdr wait <subcommand> ...");
-        println!("       herdr session <subcommand> ...");
-        println!("       herdr integration <subcommand> ...");
-        println!();
-        println!("Common commands:");
-        for (command, description) in [
-            ("herdr", "Launch or attach to the persistent session"),
-            (
-                "herdr status [server|client]",
-                "Show local client and running server status",
-            ),
-            ("herdr update", "Download and install the latest version"),
-            ("herdr completion zsh", "Generate shell completions for zsh"),
-            (
-                "herdr server stop",
-                "Stop the running server via the API socket",
-            ),
-            (
-                "herdr channel set <stable|preview>",
-                "Choose the stable or preview update channel",
-            ),
-            (
-                "herdr server reload-config",
-                "Reload config.toml in the running server",
-            ),
-            (
-                "herdr config reset-keys",
-                "Back up config.toml and remove custom keybindings",
-            ),
-            (
-                "herdr channel <subcommand>",
-                "Manage the stable or preview update channel",
-            ),
-            (
-                "herdr api <subcommand>",
-                "Inspect socket API metadata and live runtime state",
-            ),
-            (
-                "herdr workspace <subcommand>",
-                "Workspace helpers over the socket API",
-            ),
-            (
-                "herdr worktree <subcommand>",
-                "Git worktree helpers over the socket API",
-            ),
-            ("herdr tab <subcommand>", "Tab helpers over the socket API"),
-            (
-                "herdr notification <subcommand>",
-                "Notification helpers over the socket API",
-            ),
-            (
-                "herdr agent <subcommand>",
-                "Agent/terminal helpers over the socket API",
-            ),
-            (
-                "herdr pane <subcommand>",
-                "Pane control helpers over the socket API",
-            ),
-            (
-                "herdr wait <subcommand>",
-                "Blocking wait helpers over the socket API",
-            ),
-            (
-                "herdr session <subcommand>",
-                "Manage named persistent sessions",
-            ),
-            (
-                "herdr integration <subcommand>",
-                "Manage built-in agent integrations",
-            ),
-        ] {
-            println!("  {command:<32} {description}");
-        }
-        println!();
-        println!("Advanced commands:");
-        println!("  {:<32} Run as headless server", "herdr server");
-        println!();
-        println!("Options:");
-        println!("  --no-session        Run monolithically (no server/client, escape hatch)");
-        println!("  --session <name>    Use or create a named persistent session");
-        println!("  --remote <target>   Attach through SSH to a remote Herdr server");
-        println!("  --remote-keybindings <local|server>");
-        println!("                      Keybindings for --remote app attach (default: local)");
-        println!("  --handoff           Opt into live handoff for update or remote attach");
-        println!("  --default-config    Print default configuration and exit");
-        println!("  --version, -V       Print version and exit");
-        println!("  --help, -h          Show this help");
+    if let Some(code) = cli::print_root_help(&args) {
+        // Runtime-derived context clap cannot know; printed under the spec help.
         println!();
         println!("Config: {}", config::config_path().display());
         println!("Logs:   {}", logging::help_log_paths_summary());
         println!("Env:    HERDR_CONFIG_PATH overrides config file path");
         println!("Home:   https://herdr.dev");
+        let _ = code;
         return Ok(());
     }
 

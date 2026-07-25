@@ -3,9 +3,11 @@ use crate::api::schema::{
 };
 
 pub(super) fn run_worktree_command(args: &[String]) -> std::io::Result<i32> {
+    if let Some(code) = super::help::intercept(&["worktree"], args) {
+        return Ok(code);
+    }
     let Some(subcommand) = args.first().map(|arg| arg.as_str()) else {
-        print_worktree_help();
-        return Ok(2);
+        return Ok(super::help::usage_error(&["worktree"]));
     };
 
     match subcommand {
@@ -13,14 +15,11 @@ pub(super) fn run_worktree_command(args: &[String]) -> std::io::Result<i32> {
         "create" => worktree_create(&args[1..]),
         "open" => worktree_open(&args[1..]),
         "remove" => worktree_remove(&args[1..]),
-        "help" | "--help" | "-h" => {
-            print_worktree_help();
-            Ok(0)
-        }
-        _ => {
-            print_worktree_help();
-            Ok(2)
-        }
+        arg if super::help::help_mode(arg).is_some() => Ok(super::help::print(
+            &["worktree"],
+            super::help::requested_mode(args),
+        )),
+        _ => Ok(super::help::usage_error(&["worktree"])),
     }
 }
 
@@ -280,18 +279,6 @@ fn worktree_remove(args: &[String]) -> std::io::Result<i32> {
         workspace_id,
         force,
     })
-}
-
-fn print_worktree_help() {
-    eprintln!("herdr worktree commands:");
-    eprintln!("  herdr worktree list [--workspace ID | --cwd PATH] [--json]");
-    eprintln!(
-        "  herdr worktree create [--workspace ID | --cwd PATH] [--branch NAME] [--base REF] [--path PATH] [--label TEXT] [--focus] [--no-focus] [--json]"
-    );
-    eprintln!(
-        "  herdr worktree open [--workspace ID | --cwd PATH] (--path PATH | --branch NAME) [--label TEXT] [--focus] [--no-focus] [--json]"
-    );
-    eprintln!("  herdr worktree remove --workspace ID [--force] [--json]");
 }
 
 fn normalize_path_arg(value: &str) -> std::io::Result<String> {

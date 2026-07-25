@@ -9,9 +9,11 @@ use crate::api::schema::{
 };
 
 pub(super) fn run_pane_command(args: &[String]) -> std::io::Result<i32> {
+    if let Some(code) = super::help::intercept(&["pane"], args) {
+        return Ok(code);
+    }
     let Some(subcommand) = args.first().map(|arg| arg.as_str()) else {
-        print_pane_help();
-        return Ok(2);
+        return Ok(super::help::usage_error(&["pane"]));
     };
 
     match subcommand {
@@ -38,14 +40,11 @@ pub(super) fn run_pane_command(args: &[String]) -> std::io::Result<i32> {
         "release-agent" => pane_release_agent(&args[1..]),
         "report-metadata" => pane_report_metadata(&args[1..]),
         "run" => pane_run(&args[1..]),
-        "help" | "--help" | "-h" => {
-            print_pane_help();
-            Ok(0)
-        }
-        _ => {
-            print_pane_help();
-            Ok(2)
-        }
+        arg if super::help::help_mode(arg).is_some() => Ok(super::help::print(
+            &["pane"],
+            super::help::requested_mode(args),
+        )),
+        _ => Ok(super::help::usage_error(&["pane"])),
     }
 }
 
@@ -1423,40 +1422,6 @@ fn pane_report_metadata(args: &[String]) -> std::io::Result<i32> {
         seq,
         ttl_ms,
     }))
-}
-
-fn print_pane_help() {
-    eprintln!("herdr pane commands:");
-    eprintln!("  herdr pane list [--workspace <workspace_id>]");
-    eprintln!("  herdr pane current [--pane ID|--current]");
-    eprintln!("  herdr pane get <pane_id>");
-    eprintln!("  herdr pane layout [--pane ID|--current]");
-    eprintln!("  herdr pane process-info [--pane ID|--current]");
-    eprintln!("  herdr pane neighbor --direction left|right|up|down [--pane ID|--current]");
-    eprintln!("  herdr pane edges [--pane ID|--current]");
-    eprintln!("  herdr pane focus --direction left|right|up|down [--pane ID|--current]");
-    eprintln!(
-        "  herdr pane resize --direction left|right|up|down [--amount FLOAT] [--pane ID|--current]"
-    );
-    eprintln!("  herdr pane zoom [<pane_id>|--pane ID|--current] [--toggle|--on|--off]");
-    eprintln!("  herdr pane rename <pane_id> <label>|--clear");
-    eprintln!("  herdr pane read <pane_id> [--source visible|recent|recent-unwrapped] [--lines N] [--format text|ansi] [--ansi]");
-    eprintln!(
-        "  herdr pane split [<pane_id>|--pane ID|--current] --direction right|down [--ratio FLOAT] [--cwd PATH] [--env KEY=VALUE] [--focus] [--no-focus]"
-    );
-    eprintln!("  herdr pane swap --direction left|right|up|down [--pane ID|--current]");
-    eprintln!("  herdr pane swap --source-pane ID --target-pane ID");
-    eprintln!("  herdr pane move <pane_id> --tab <tab_id> --split right|down [--target-pane ID] [--ratio FLOAT] [--focus|--no-focus]");
-    eprintln!("  herdr pane move <pane_id> --new-tab [--workspace ID] [--label TEXT] [--focus|--no-focus]");
-    eprintln!("  herdr pane move <pane_id> --new-workspace [--label TEXT] [--tab-label TEXT] [--focus|--no-focus]");
-    eprintln!("  herdr pane close <pane_id>");
-    eprintln!("  herdr pane send-text <pane_id> <text>");
-    eprintln!("  herdr pane send-keys <pane_id> <key> [key ...]");
-    eprintln!("  herdr pane report-agent <pane_id> --source ID --agent LABEL --state idle|working|blocked|unknown [--message TEXT] [--custom-status TEXT] [--seq N] [--agent-session-id ID] [--agent-session-path PATH]");
-    eprintln!("  herdr pane report-agent-session <pane_id> --source ID --agent LABEL [--seq N] [--agent-session-id ID] [--agent-session-path PATH]");
-    eprintln!("  herdr pane release-agent <pane_id> --source ID --agent LABEL [--seq N]");
-    eprintln!("  herdr pane report-metadata <pane_id> --source ID [--agent LABEL] [--applies-to-source ID] [--title TEXT|--clear-title] [--display-agent TEXT|--clear-display-agent] [--custom-status TEXT|--clear-custom-status] [--marker TEXT|--clear-marker] [--state-label STATUS=TEXT] [--clear-state-labels] [--seq N] [--ttl-ms N]");
-    eprintln!("  herdr pane run <pane_id> <command>");
 }
 
 #[cfg(test)]

@@ -4,28 +4,23 @@ use clap_complete::{generate, Shell};
 
 pub(super) const SUPPORTED_SHELLS: [&str; 5] = ["bash", "elvish", "fish", "powershell", "zsh"];
 
-pub(super) fn supported_shells_usage() -> String {
-    SUPPORTED_SHELLS.join("|")
-}
-
 pub(super) fn run_completion_command(args: &[String]) -> std::io::Result<i32> {
     let Some(shell) = args.first().map(String::as_str) else {
-        print_completion_help();
-        return Ok(2);
+        return Ok(super::help::usage_error(&["completion"]));
     };
-    if matches!(shell, "help" | "--help" | "-h") {
-        print_completion_help();
-        return Ok(0);
+    if super::help::help_mode(shell).is_some() {
+        return Ok(super::help::print(
+            &["completion"],
+            super::help::requested_mode(args),
+        ));
     }
     if args.len() != 1 {
-        print_completion_help();
-        return Ok(2);
+        return Ok(super::help::usage_error(&["completion"]));
     }
 
     let Some(shell) = parse_shell(shell) else {
         eprintln!("unknown shell: {shell}");
-        print_completion_help();
-        return Ok(2);
+        return Ok(super::help::usage_error(&["completion"]));
     };
 
     let mut command = super::spec::command();
@@ -78,10 +73,6 @@ fn parse_shell(shell: &str) -> Option<Shell> {
         value if value == SUPPORTED_SHELLS[4] => Some(Shell::Zsh),
         _ => None,
     }
-}
-
-fn print_completion_help() {
-    eprintln!("usage: herdr completion <{}>", supported_shells_usage());
 }
 
 #[cfg(test)]
