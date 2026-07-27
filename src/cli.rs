@@ -1,69 +1,21 @@
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use std::time::{SystemTime, UNIX_EPOCH};
 
 use serde::Serialize;
 
 use crate::api::client::{ApiClient, ApiClientError};
 use crate::api::schema::{
-    AgentStatus, ClientWindowTitleSetParams, EmptyParams, EventData, EventMatch, EventsWaitParams,
-    Method, OutputMatch, PaneAgentState, PaneWaitForOutputParams, ReadFormat, ReadSource, Request,
-    ResponseResult, SplitDirection, SubscriptionEventData, SubscriptionEventEnvelope,
-    SubscriptionEventKind,
+    AgentStatus, ClientWindowTitleSetParams, EmptyParams, Method, PaneAgentState, ReadFormat,
+    ReadSource, Request, SplitDirection,
 };
 
 mod agent;
 mod api;
 mod completion;
-mod help;
-
-/// Command paths the dispatcher renders help for. Kept beside the dispatch so a
-/// test can assert each one still resolves in the spec (see `help::tests`).
-/// Renders the root `herdr --help`/`-h` from the spec.
-///
-/// Returns `None` when help was not requested. The caller appends
-/// runtime-derived context (config and log paths) that the static spec cannot
-/// know.
-pub(crate) fn print_root_help(args: &[String]) -> Option<i32> {
-    let mode = args.iter().find_map(|arg| help::help_mode(arg))?;
-    Some(help::print(&[], mode))
-}
-
-#[cfg(test)]
-pub(super) const HELP_PATHS: &[&[&str]] = &[
-    &[],
-    &["channel"],
-    &["completion"],
-    &["config"],
-    &["status"],
-    &["server"],
-    &["api"],
-    &["api", "schema"],
-    &["workspace"],
-    &["worktree"],
-    &["tab"],
-    &["notification"],
-    &["agent"],
-    &["agent", "attach"],
-    &["agent", "explain"],
-    &["agent", "wait"],
-    &["pane"],
-    &["wait"],
-    &["terminal"],
-    &["terminal", "attach"],
-    &["terminal", "title"],
-    &["terminal", "session"],
-    &["terminal", "session", "control"],
-    &["terminal", "session", "observe"],
-    &["session"],
-    &["session", "attach"],
-    &["integration"],
-    &["plugin"],
-    &["plugin", "action"],
-    &["plugin", "pane"],
-];
 mod integration;
 mod notification;
 mod pane;
 mod plugin;
+mod protocol_guard;
 mod runtime;
 mod server;
 mod spec;
@@ -71,6 +23,21 @@ mod status;
 mod tab;
 mod workspace;
 mod worktree;
+
+const TERMINAL_SESSION_OBSERVE_USAGE: &str =
+    "usage: herdr terminal session observe <target> [--cols N] [--rows N]";
+const TERMINAL_SESSION_CONTROL_USAGE: &str =
+    "usage: herdr terminal session control <target> [--takeover] [--cols N] [--rows N]";
+
+pub(crate) fn parse_token_assignment(raw: &str) -> Result<(String, Option<String>), String> {
+    let Some((key, value)) = raw.split_once('=') else {
+        return Err("token must use NAME=VALUE".into());
+    };
+    if key.is_empty() {
+        return Err("token name must not be empty".into());
+    }
+    Ok((key.to_string(), Some(value.to_string())))
+}
 
 pub(crate) fn parse_env_assignment(raw: &str) -> Result<(String, String), String> {
     let Some((key, value)) = raw.split_once('=') else {
@@ -90,10 +57,25 @@ pub enum CommandOutcome {
     NotCli,
 }
 
+pub(super) fn print_read_response(response: &serde_json::Value) -> std::io::Result<i32> {
+    if response.get("error").is_some() {
+        eprintln!("{response}");
+        return Ok(1);
+    }
+    if let Some(text) = response["result"]["read"]["text"].as_str() {
+        print!("{text}");
+    }
+    Ok(0)
+}
+
 pub fn maybe_run(args: &[String]) -> std::io::Result<CommandOutcome> {
     let Some(command) = args.get(1).map(|arg| arg.as_str()) else {
         return Ok(CommandOutcome::NotCli);
     };
+
+    if spec::print_requested_help(args)? {
+        return Ok(CommandOutcome::Handled(0));
+    }
 
     let exit_code = match command {
         "server" => {
@@ -115,7 +97,6 @@ pub fn maybe_run(args: &[String]) -> std::io::Result<CommandOutcome> {
         "terminal" => run_terminal_command(&args[2..])?,
         "pane" => pane::run_pane_command(&args[2..])?,
         "plugin" => plugin::run_plugin_command(&args[2..])?,
-        "wait" => run_wait_command(&args[2..])?,
         "integration" => integration::run_integration_command(&args[2..])?,
         "session" => run_session_command(&args[2..])?,
         _ => return Ok(CommandOutcome::NotCli),
@@ -132,10 +113,14 @@ fn run_channel_command(args: &[String]) -> std::io::Result<i32> {
             println!("{}", config.update.channel.as_str());
             Ok(0)
         }
-        Some(arg) if help::help_mode(arg).is_some() => {
-            Ok(help::print(&["channel"], help::requested_mode(args)))
+        Some("help" | "--help" | "-h") => {
+            print_channel_help();
+            Ok(0)
         }
-        _ => Ok(help::usage_error(&["channel"])),
+        _ => {
+            print_channel_help();
+            Ok(2)
+        }
     }
 }
 
@@ -249,21 +234,56 @@ fn channel_set_install_action(
     }
 }
 
+fn print_channel_help() {
+    eprintln!("herdr channel commands:");
+    eprintln!("  herdr channel show                  print the configured update channel");
+    eprintln!("  herdr channel set <stable|preview>  choose the update channel");
+}
+
 fn run_config_command(args: &[String]) -> std::io::Result<i32> {
-    if let Some(code) = help::intercept(&["config"], args) {
-        return Ok(code);
-    }
     let Some(subcommand) = args.first().map(|arg| arg.as_str()) else {
-        return Ok(help::usage_error(&["config"]));
+        print_config_help();
+        return Ok(2);
     };
 
     match subcommand {
+        "check" => config_check(&args[1..]),
         "reset-keys" => config_reset_keys(&args[1..]),
-        arg if help::help_mode(arg).is_some() => {
-            Ok(help::print(&["config"], help::requested_mode(args)))
+        "help" | "--help" | "-h" => {
+            print_config_help();
+            Ok(0)
         }
-        _ => Ok(help::usage_error(&["config"])),
+        _ => {
+            print_config_help();
+            Ok(2)
+        }
     }
+}
+
+fn config_check(args: &[String]) -> std::io::Result<i32> {
+    match args {
+        [] => {}
+        [flag] if matches!(flag.as_str(), "help" | "--help" | "-h") => {
+            eprintln!("usage: herdr config check");
+            return Ok(0);
+        }
+        _ => {
+            eprintln!("usage: herdr config check");
+            return Ok(2);
+        }
+    }
+
+    let diagnostics = crate::config::Config::load().diagnostics;
+    if diagnostics.is_empty() {
+        println!("config: ok");
+    } else {
+        println!("config: issues found");
+        for diagnostic in &diagnostics {
+            println!("{diagnostic}");
+        }
+    }
+
+    Ok(i32::from(!diagnostics.is_empty()))
 }
 
 fn config_reset_keys(args: &[String]) -> std::io::Result<i32> {
@@ -356,48 +376,30 @@ fn key_config_backup_path(path: &std::path::Path) -> std::path::PathBuf {
 }
 
 fn run_terminal_command(args: &[String]) -> std::io::Result<i32> {
-    if let Some(code) = help::intercept(&["terminal"], args) {
-        return Ok(code);
-    }
     let Some(subcommand) = args.first().map(|arg| arg.as_str()) else {
-        return Ok(help::usage_error(&["terminal"]));
+        print_terminal_help();
+        return Ok(2);
     };
 
     match subcommand {
         "attach" => terminal_attach(&args[1..]),
         "session" => terminal_session(&args[1..]),
         "title" => terminal_title(&args[1..]),
-        arg if help::help_mode(arg).is_some() => {
-            Ok(help::print(&["terminal"], help::requested_mode(args)))
+        "help" | "--help" | "-h" => {
+            print_terminal_help();
+            Ok(0)
         }
-        _ => Ok(help::usage_error(&["terminal"])),
-    }
-}
-
-fn run_wait_command(args: &[String]) -> std::io::Result<i32> {
-    if let Some(code) = help::intercept(&["wait"], args) {
-        return Ok(code);
-    }
-    let Some(subcommand) = args.first().map(|arg| arg.as_str()) else {
-        return Ok(help::usage_error(&["wait"]));
-    };
-
-    match subcommand {
-        "output" => wait_output(&args[1..]),
-        "agent-status" => wait_agent_status(&args[1..]),
-        arg if help::help_mode(arg).is_some() => {
-            Ok(help::print(&["wait"], help::requested_mode(args)))
+        _ => {
+            print_terminal_help();
+            Ok(2)
         }
-        _ => Ok(help::usage_error(&["wait"])),
     }
 }
 
 fn run_session_command(args: &[String]) -> std::io::Result<i32> {
-    if let Some(code) = help::intercept(&["session"], args) {
-        return Ok(code);
-    }
     let Some(subcommand) = args.first().map(|arg| arg.as_str()) else {
-        return Ok(help::usage_error(&["session"]));
+        print_session_help();
+        return Ok(2);
     };
 
     match subcommand {
@@ -405,23 +407,27 @@ fn run_session_command(args: &[String]) -> std::io::Result<i32> {
         "attach" => session_attach_help(&args[1..]),
         "stop" => session_stop(&args[1..]),
         "delete" => session_delete(&args[1..]),
-        arg if help::help_mode(arg).is_some() => {
-            Ok(help::print(&["session"], help::requested_mode(args)))
+        "help" | "--help" | "-h" => {
+            print_session_help();
+            Ok(0)
         }
-        _ => Ok(help::usage_error(&["session"])),
+        _ => {
+            print_session_help();
+            Ok(2)
+        }
     }
 }
 
 fn session_attach_help(args: &[String]) -> std::io::Result<i32> {
-    if let Some(arg) = args.first() {
-        if help::help_mode(arg).is_some() {
-            return Ok(help::print(
-                &["session", "attach"],
-                help::requested_mode(args),
-            ));
-        }
+    if matches!(
+        args.first().map(String::as_str),
+        Some("help" | "--help" | "-h")
+    ) {
+        eprintln!("usage: herdr session attach <name>");
+        return Ok(0);
     }
-    Ok(help::usage_error(&["session", "attach"]))
+    eprintln!("usage: herdr session attach <name>");
+    Ok(2)
 }
 
 fn session_list(args: &[String]) -> std::io::Result<i32> {
@@ -501,7 +507,10 @@ fn session_delete(args: &[String]) -> std::io::Result<i32> {
 }
 
 fn terminal_attach(args: &[String]) -> std::io::Result<i32> {
-    let (terminal_id, takeover) = match parse_attach_target(args, &["terminal", "attach"]) {
+    let (terminal_id, takeover) = match parse_attach_target(
+        args,
+        "usage: herdr terminal attach <terminal_id> [--takeover]",
+    ) {
         Ok(parsed) => parsed,
         Err(code) => return Ok(code),
     };
@@ -510,24 +519,26 @@ fn terminal_attach(args: &[String]) -> std::io::Result<i32> {
 }
 
 fn terminal_session(args: &[String]) -> std::io::Result<i32> {
-    if let Some(code) = help::intercept(&["terminal", "session"], args) {
-        return Ok(code);
-    }
     match args.first().map(|arg| arg.as_str()) {
         Some("control") => terminal_session_control(&args[1..]),
         Some("observe") => terminal_session_observe(&args[1..]),
-        Some(arg) if help::help_mode(arg).is_some() => Ok(help::print(
-            &["terminal", "session"],
-            help::requested_mode(args),
-        )),
-        _ => Ok(help::usage_error(&["terminal", "session"])),
+        Some("help" | "--help" | "-h") => {
+            eprintln!("{TERMINAL_SESSION_CONTROL_USAGE}");
+            eprintln!("{TERMINAL_SESSION_OBSERVE_USAGE}");
+            Ok(0)
+        }
+        _ => {
+            eprintln!("{TERMINAL_SESSION_CONTROL_USAGE}");
+            eprintln!("{TERMINAL_SESSION_OBSERVE_USAGE}");
+            Ok(2)
+        }
     }
 }
 
 fn terminal_session_control(args: &[String]) -> std::io::Result<i32> {
     let options = match parse_terminal_session_options(
         args,
-        &["terminal", "session", "control"],
+        TERMINAL_SESSION_CONTROL_USAGE,
         "control",
         true,
     )? {
@@ -547,7 +558,7 @@ fn terminal_session_control(args: &[String]) -> std::io::Result<i32> {
 fn terminal_session_observe(args: &[String]) -> std::io::Result<i32> {
     let options = match parse_terminal_session_options(
         args,
-        &["terminal", "session", "observe"],
+        TERMINAL_SESSION_OBSERVE_USAGE,
         "observe",
         false,
     )? {
@@ -568,17 +579,20 @@ struct TerminalSessionOptions {
 
 fn parse_terminal_session_options(
     args: &[String],
-    help_path: &[&str],
+    usage: &str,
     command: &str,
     allow_takeover: bool,
 ) -> std::io::Result<Result<TerminalSessionOptions, i32>> {
-    if let Some(arg) = args.first() {
-        if help::help_mode(arg).is_some() {
-            return Ok(Err(help::print(help_path, help::requested_mode(args))));
-        }
+    if matches!(
+        args.first().map(|arg| arg.as_str()),
+        Some("help" | "--help" | "-h")
+    ) {
+        eprintln!("{usage}");
+        return Ok(Err(0));
     }
     let Some(target) = args.first() else {
-        return Ok(Err(help::usage_error(help_path)));
+        eprintln!("{usage}");
+        return Ok(Err(2));
     };
 
     let mut cols = 120;
@@ -593,24 +607,28 @@ fn parse_terminal_session_options(
             }
             "--cols" => {
                 let Some(value) = args.get(i + 1) else {
-                    return Ok(Err(help::usage_error(help_path)));
+                    eprintln!("{usage}");
+                    return Ok(Err(2));
                 };
                 cols = parse_terminal_dimension(value, "--cols")?;
                 i += 2;
             }
             "--rows" => {
                 let Some(value) = args.get(i + 1) else {
-                    return Ok(Err(help::usage_error(help_path)));
+                    eprintln!("{usage}");
+                    return Ok(Err(2));
                 };
                 rows = parse_terminal_dimension(value, "--rows")?;
                 i += 2;
             }
-            arg if help::help_mode(arg).is_some() => {
-                return Ok(Err(help::print(help_path, help::requested_mode(args))));
+            "help" | "--help" | "-h" => {
+                eprintln!("{usage}");
+                return Ok(Err(0));
             }
             other => {
                 eprintln!("unknown terminal session {command} option: {other}");
-                return Ok(Err(help::usage_error(help_path)));
+                eprintln!("{usage}");
+                return Ok(Err(2));
             }
         }
     }
@@ -640,9 +658,6 @@ fn parse_terminal_dimension(raw: &str, flag: &str) -> std::io::Result<u16> {
 }
 
 fn terminal_title(args: &[String]) -> std::io::Result<i32> {
-    if let Some(code) = help::intercept(&["terminal", "title"], args) {
-        return Ok(code);
-    }
     match args.first().map(|arg| arg.as_str()) {
         Some("set") => {
             if args.len() != 2 {
@@ -666,30 +681,31 @@ fn terminal_title(args: &[String]) -> std::io::Result<i32> {
                 method: Method::ClientWindowTitleClear(EmptyParams::default()),
             })?)
         }
-        Some(arg) if help::help_mode(arg).is_some() => Ok(help::print(
-            &["terminal", "title"],
-            help::requested_mode(args),
-        )),
-        _ => Ok(help::usage_error(&["terminal", "title"])),
+        Some("help" | "--help" | "-h") => {
+            eprintln!("usage: herdr terminal title set <title>");
+            eprintln!("       herdr terminal title clear");
+            Ok(0)
+        }
+        _ => {
+            eprintln!("usage: herdr terminal title set <title>");
+            eprintln!("       herdr terminal title clear");
+            Ok(2)
+        }
     }
 }
 
-pub(super) fn parse_attach_target(
-    args: &[String],
-    help_path: &[&str],
-) -> Result<(String, bool), i32> {
+pub(super) fn parse_attach_target(args: &[String], usage: &str) -> Result<(String, bool), i32> {
     let Some(target) = args.first() else {
-        return Err(help::usage_error(help_path));
+        eprintln!("{usage}");
+        return Err(2);
     };
-    if help::help_mode(target).is_some() {
-        return Err(help::print(help_path, help::requested_mode(args)));
-    }
     let mut takeover = false;
     for arg in &args[1..] {
         match arg.as_str() {
             "--takeover" => takeover = true,
-            arg if help::help_mode(arg).is_some() => {
-                return Err(help::print(help_path, help::requested_mode(args)));
+            "help" | "--help" | "-h" => {
+                eprintln!("{usage}");
+                return Err(0);
             }
             other => {
                 eprintln!("unknown option: {other}");
@@ -698,250 +714,6 @@ pub(super) fn parse_attach_target(
         }
     }
     Ok((target.clone(), takeover))
-}
-
-fn wait_output(args: &[String]) -> std::io::Result<i32> {
-    let Some(raw_pane_id) = args.first() else {
-        eprintln!("usage: herdr wait output <pane_id> --match <text> [--source visible|recent|recent-unwrapped] [--lines N] [--timeout MS] [--regex]");
-        return Ok(2);
-    };
-
-    let pane_id = normalize_pane_id(raw_pane_id);
-    let mut source = ReadSource::Recent;
-    let mut lines = None;
-    let mut timeout_ms = None;
-    let mut strip_ansi = true;
-    let mut regex = false;
-    let mut match_value = None;
-
-    let mut index = 1;
-    while index < args.len() {
-        match args[index].as_str() {
-            "--match" => {
-                let Some(value) = args.get(index + 1) else {
-                    eprintln!("missing value for --match");
-                    return Ok(2);
-                };
-                match_value = Some(value.clone());
-                index += 2;
-            }
-            "--source" => {
-                let Some(value) = args.get(index + 1) else {
-                    eprintln!("missing value for --source");
-                    return Ok(2);
-                };
-                source = parse_read_source(value)?;
-                index += 2;
-            }
-            "--lines" => {
-                let Some(value) = args.get(index + 1) else {
-                    eprintln!("missing value for --lines");
-                    return Ok(2);
-                };
-                lines = Some(parse_u32_flag("--lines", value)?);
-                index += 2;
-            }
-            "--timeout" => {
-                let Some(value) = args.get(index + 1) else {
-                    eprintln!("missing value for --timeout");
-                    return Ok(2);
-                };
-                timeout_ms = Some(parse_u64_flag("--timeout", value)?);
-                index += 2;
-            }
-            "--regex" => {
-                regex = true;
-                index += 1;
-            }
-            "--raw" => {
-                strip_ansi = false;
-                index += 1;
-            }
-            other => {
-                eprintln!("unknown option: {other}");
-                return Ok(2);
-            }
-        }
-    }
-
-    let Some(match_value) = match_value else {
-        eprintln!("missing required --match");
-        return Ok(2);
-    };
-
-    let matcher = if regex {
-        OutputMatch::Regex { value: match_value }
-    } else {
-        OutputMatch::Substring { value: match_value }
-    };
-
-    let response = send_request(&Request {
-        id: "cli:wait:output".into(),
-        method: Method::PaneWaitForOutput(PaneWaitForOutputParams {
-            pane_id,
-            source,
-            lines,
-            r#match: matcher,
-            timeout_ms,
-            strip_ansi,
-        }),
-    })?;
-
-    if response.get("error").is_some() {
-        eprintln!("{}", serde_json::to_string(&response).unwrap());
-        return Ok(1);
-    }
-
-    println!("{}", serde_json::to_string(&response).unwrap());
-    Ok(0)
-}
-
-fn wait_agent_status(args: &[String]) -> std::io::Result<i32> {
-    let Some(raw_pane_id) = args.first() else {
-        eprintln!("usage: herdr wait agent-status <pane_id> --status <idle|working|blocked|done|unknown> [--timeout MS]");
-        return Ok(2);
-    };
-
-    let pane_id = normalize_pane_id(raw_pane_id);
-    let mut timeout_ms = None;
-    let mut desired_status = None;
-
-    let mut index = 1;
-    while index < args.len() {
-        match args[index].as_str() {
-            "--status" => {
-                let Some(value) = args.get(index + 1) else {
-                    eprintln!("missing value for --status");
-                    return Ok(2);
-                };
-                desired_status = Some(parse_agent_status(value)?);
-                index += 2;
-            }
-            "--timeout" => {
-                let Some(value) = args.get(index + 1) else {
-                    eprintln!("missing value for --timeout");
-                    return Ok(2);
-                };
-                timeout_ms = Some(parse_u64_flag("--timeout", value)?);
-                index += 2;
-            }
-            other => {
-                eprintln!("unknown option: {other}");
-                return Ok(2);
-            }
-        }
-    }
-
-    let Some(agent_status) = desired_status else {
-        eprintln!("missing required --status");
-        return Ok(2);
-    };
-
-    wait_for_agent_status_change(pane_id, agent_status, timeout_ms)
-}
-
-fn wait_for_agent_status_change(
-    pane_id: String,
-    agent_status: AgentStatus,
-    timeout_ms: Option<u64>,
-) -> std::io::Result<i32> {
-    let request = Request {
-        id: "cli:wait:agent-status".into(),
-        method: Method::EventsWait(EventsWaitParams {
-            match_event: EventMatch::PaneAgentStatusChanged {
-                pane_id,
-                agent_status,
-            },
-            timeout_ms,
-        }),
-    };
-    let response = send_request(&request)?;
-    match crate::api::client::parse_response_value(response) {
-        Ok(success) => {
-            let ResponseResult::WaitMatched { event } = success.result else {
-                return Err(std::io::Error::other("unexpected wait response result"));
-            };
-            let EventData::PaneAgentStatusChanged {
-                pane_id,
-                workspace_id,
-                agent_status,
-                agent,
-                title,
-                display_agent,
-                custom_status,
-                state_labels,
-            } = event.data
-            else {
-                return Err(std::io::Error::other("unexpected wait event data"));
-            };
-            let event = SubscriptionEventEnvelope {
-                event: SubscriptionEventKind::PaneAgentStatusChanged,
-                data: SubscriptionEventData::PaneAgentStatusChanged(
-                    crate::api::schema::PaneAgentStatusChangedEvent {
-                        pane_id,
-                        workspace_id,
-                        agent_status,
-                        agent,
-                        custom_status,
-                        title,
-                        display_agent,
-                        state_labels,
-                    },
-                ),
-            };
-            println!(
-                "{}",
-                serde_json::to_string(&event).map_err(std::io::Error::other)?
-            );
-            Ok(0)
-        }
-        Err(ApiClientError::ErrorResponse(response)) => {
-            if response.error.code == "timeout" {
-                eprintln!("timed out waiting for agent status change");
-            } else {
-                eprintln!(
-                    "{}",
-                    serde_json::to_string(&response).map_err(std::io::Error::other)?
-                );
-            }
-            Ok(1)
-        }
-        Err(err) => Err(api_client_error_to_io(err)),
-    }
-}
-
-pub(super) fn wait_for_agent_change(
-    request: Request,
-    timeout_ms: Option<u64>,
-    timeout_message: &str,
-) -> std::io::Result<i32> {
-    let read_timeout = timeout_ms.map(Duration::from_millis);
-    let (ack, mut stream) = ApiClient::local()
-        .subscribe_value(&request, read_timeout)
-        .map_err(api_client_error_to_io)?;
-    if let Err(err) = crate::api::client::parse_response_value(ack) {
-        if let ApiClientError::ErrorResponse(response) = err {
-            eprintln!("{}", serde_json::to_string(&response).unwrap());
-            return Ok(1);
-        }
-        return Err(api_client_error_to_io(err));
-    }
-
-    match stream.next_event() {
-        Ok(None) => {
-            eprintln!("subscription closed before event arrived");
-            Ok(1)
-        }
-        Ok(Some(event_value)) => {
-            println!("{}", serde_json::to_string(&event_value).unwrap());
-            Ok(0)
-        }
-        Err(ApiClientError::Io(err)) if api_timeout_error(&err) => {
-            eprintln!("{timeout_message}");
-            Ok(1)
-        }
-        Err(err) => Err(api_client_error_to_io(err)),
-    }
 }
 
 pub(super) fn print_response(response: &serde_json::Value) -> std::io::Result<i32> {
@@ -969,16 +741,41 @@ pub(super) fn send_ok_request(method: Method) -> std::io::Result<i32> {
 }
 
 pub(super) fn send_request(request: &Request) -> std::io::Result<serde_json::Value> {
+    let client = ApiClient::local();
+    ensure_server_protocol_compatible(&client, &request.id)?;
+    client
+        .request_value(request)
+        .map_err(api_client_error_to_io)
+}
+
+pub(super) fn send_request_unchecked(request: &Request) -> std::io::Result<serde_json::Value> {
     ApiClient::local()
         .request_value(request)
         .map_err(api_client_error_to_io)
 }
 
-fn api_timeout_error(err: &std::io::Error) -> bool {
-    matches!(
-        err.kind(),
-        std::io::ErrorKind::TimedOut | std::io::ErrorKind::WouldBlock
-    )
+fn ensure_server_protocol_compatible(client: &ApiClient, request_id: &str) -> std::io::Result<()> {
+    let status = client.status().map_err(api_client_error_to_io)?;
+    let server_protocol = status
+        .protocol
+        .ok_or_else(|| std::io::Error::other("server ping did not include a protocol version"))?;
+    let Some(response) = protocol_guard::mismatch_response(
+        request_id,
+        server_protocol,
+        &crate::session::active_restart_after_update_guidance(),
+    ) else {
+        return Ok(());
+    };
+
+    eprintln!(
+        "{}",
+        serde_json::to_string(&response).map_err(std::io::Error::other)?
+    );
+    Err(protocol_guard::reported_error())
+}
+
+pub(crate) fn protocol_mismatch_was_reported(err: &std::io::Error) -> bool {
+    protocol_guard::was_reported(err)
 }
 
 fn api_client_error_to_io(err: ApiClientError) -> std::io::Error {
@@ -1129,6 +926,31 @@ fn print_session_error(code: &str, message: &str) {
         }))
         .unwrap()
     );
+}
+
+fn print_config_help() {
+    eprintln!("herdr config commands:");
+    eprintln!("  herdr config check  validate config.toml and print diagnostics");
+    eprintln!("  herdr config reset-keys  back up config.toml and remove custom keybindings");
+}
+
+fn print_terminal_help() {
+    eprintln!("herdr terminal commands:");
+    eprintln!("  herdr terminal attach <terminal_id> [--takeover]");
+    eprintln!("  herdr terminal session control <target> [--takeover] [--cols N] [--rows N]");
+    eprintln!("  herdr terminal session observe <target> [--cols N] [--rows N]");
+    eprintln!("  herdr terminal title set <title>");
+    eprintln!("  herdr terminal title clear");
+    eprintln!("  detach from direct attach with ctrl+b q; send literal ctrl+b with ctrl+b ctrl+b");
+}
+
+fn print_session_help() {
+    eprintln!("herdr session commands:");
+    eprintln!("  herdr session list [--json]");
+    eprintln!("  herdr session attach <name>");
+    eprintln!("  herdr session stop <name> [--json]");
+    eprintln!("  herdr session delete <name> [--json]");
+    eprintln!("  use 'default' as <name> to target the default session for stop");
 }
 
 fn _print_json<T: Serialize>(value: &T) {

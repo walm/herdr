@@ -3,11 +3,9 @@ use std::collections::HashMap;
 use crate::api::schema::{TabCreateParams, TabListParams, TabRenameParams};
 
 pub(super) fn run_tab_command(args: &[String]) -> std::io::Result<i32> {
-    if let Some(code) = super::help::intercept(&["tab"], args) {
-        return Ok(code);
-    }
     let Some(subcommand) = args.first().map(|arg| arg.as_str()) else {
-        return Ok(super::help::usage_error(&["tab"]));
+        print_tab_help();
+        return Ok(2);
     };
 
     match subcommand {
@@ -17,11 +15,14 @@ pub(super) fn run_tab_command(args: &[String]) -> std::io::Result<i32> {
         "focus" => tab_focus(&args[1..]),
         "rename" => tab_rename(&args[1..]),
         "close" => tab_close(&args[1..]),
-        arg if super::help::help_mode(arg).is_some() => Ok(super::help::print(
-            &["tab"],
-            super::help::requested_mode(args),
-        )),
-        _ => Ok(super::help::usage_error(&["tab"])),
+        "help" | "--help" | "-h" => {
+            print_tab_help();
+            Ok(0)
+        }
+        _ => {
+            print_tab_help();
+            Ok(2)
+        }
     }
 }
 
@@ -171,4 +172,16 @@ fn tab_close(args: &[String]) -> std::io::Result<i32> {
     }
 
     super::runtime::tab_close(super::normalize_tab_id(raw_tab_id))
+}
+
+fn print_tab_help() {
+    eprintln!("herdr tab commands:");
+    eprintln!("  herdr tab list [--workspace <workspace_id>]");
+    eprintln!(
+        "  herdr tab create [--workspace <workspace_id>] [--cwd PATH] [--label TEXT] [--env KEY=VALUE] [--focus] [--no-focus]"
+    );
+    eprintln!("  herdr tab get <tab_id>");
+    eprintln!("  herdr tab focus <tab_id>");
+    eprintln!("  herdr tab rename <tab_id> <label>");
+    eprintln!("  herdr tab close <tab_id>");
 }

@@ -13,11 +13,14 @@ pub(super) fn run_server_command(args: &[String]) -> std::io::Result<Option<i32>
         "agent-manifests" => server_agent_manifests(&args[1..]).map(Some),
         "update-agent-manifests" => server_update_agent_manifests(&args[1..]).map(Some),
         "reload-agent-manifests" => server_reload_agent_manifests(&args[1..]).map(Some),
-        arg if super::help::help_mode(arg).is_some() => Ok(Some(super::help::print(
-            &["server"],
-            super::help::requested_mode(args),
-        ))),
-        _ => Ok(Some(super::help::usage_error(&["server"]))),
+        "help" | "--help" | "-h" => {
+            print_server_help();
+            Ok(Some(0))
+        }
+        _ => {
+            print_server_help();
+            Ok(Some(2))
+        }
     }
 }
 
@@ -198,7 +201,9 @@ fn server_live_handoff(args: &[String]) -> std::io::Result<i32> {
         return Ok(2);
     };
 
-    let response = super::send_request(&Request {
+    // Live handoff is itself a protocol-mismatch recovery path, so it must
+    // reach the running server without the normal CLI compatibility guard.
+    let response = super::send_request_unchecked(&Request {
         id: "cli:server:live-handoff".into(),
         method: Method::ServerLiveHandoff(params),
     })?;
@@ -245,6 +250,17 @@ fn parse_live_handoff_params(args: &[String]) -> Option<ServerLiveHandoffParams>
         idx += 1;
     }
     Some(params)
+}
+
+fn print_server_help() {
+    eprintln!("herdr server commands:");
+    eprintln!("  herdr server                run as headless server");
+    eprintln!("  herdr server stop           stop the running server via the API socket");
+    eprintln!("  herdr server live-handoff   hand off live panes to a new local server");
+    eprintln!("  herdr server reload-config  reload config.toml in the running server");
+    eprintln!("  herdr server agent-manifests [--json]  show agent detection manifest status");
+    eprintln!("  herdr server update-agent-manifests [--json]  fetch and reload agent detection manifests");
+    eprintln!("  herdr server reload-agent-manifests  reload agent detection manifests in the running server");
 }
 
 #[cfg(test)]

@@ -15,7 +15,10 @@ pub(super) fn run_status_command(args: &[String]) -> std::io::Result<i32> {
             print_client_status(json)?;
             Ok(0)
         }
-        StatusScope::Help(mode) => Ok(super::help::print(&["status"], mode)),
+        StatusScope::Help => {
+            print_status_help();
+            Ok(0)
+        }
     }
 }
 
@@ -24,7 +27,7 @@ enum StatusScope {
     Full,
     Server,
     Client,
-    Help(super::help::HelpMode),
+    Help,
 }
 
 fn parse_status_args(args: &[String]) -> Option<(StatusScope, bool)> {
@@ -37,15 +40,15 @@ fn parse_status_args(args: &[String]) -> Option<(StatusScope, bool)> {
         Some("client") => {
             parse_status_scope_args(args, StatusScope::Client, "herdr status client [--json]")
         }
-        Some(arg) if super::help::help_mode(arg).is_some() => {
+        Some("help" | "--help" | "-h") => {
             if args.len() > 1 {
-                super::help::usage_error(&["status"]);
+                print_status_help();
                 return None;
             }
-            Some((StatusScope::Help(super::help::requested_mode(args)), false))
+            Some((StatusScope::Help, false))
         }
         Some(_) => {
-            super::help::usage_error(&["status"]);
+            print_status_help();
             None
         }
     }
@@ -318,4 +321,11 @@ fn current_exe_label() -> String {
     std::env::current_exe()
         .map(|path| path.display().to_string())
         .unwrap_or_else(|err| format!("unknown ({err})"))
+}
+
+fn print_status_help() {
+    eprintln!("herdr status commands:");
+    eprintln!("  herdr status [--json]         show local client and running server status");
+    eprintln!("  herdr status server [--json]  show running server status");
+    eprintln!("  herdr status client [--json]  show local client binary status");
 }

@@ -1,7 +1,6 @@
-# GitHub usernames, one per line.
-# Maintainers and trusted contributors can be listed here.
+# GitHub usernames that bypass automated PR intake, one per line.
+# This does not approve feature scope or grant maintainer authority; see .github/MAINTAINERS.
 Edmund-a7
-naaive
 othavioquiliao
 edheltzel
 EYH0602
@@ -22,17 +21,14 @@ chenrui333
 wayneleelwc
 reobin
 wardpeet
-juliogc
 turgaybulut
 SunskyXH
 sf-jin-ku
 DeevsDeevs
 wbxl2000
-charliesbot
 udirom
 imrajyavardhan12
 dzevs
-igasmi
 minatoaquaMK2
 dmmulroy
 cullendotdev
@@ -43,3 +39,15 @@ ppggff
 TonyxSun
 akbash-bot
 liby
+kovalov
+tontinton
+badlogic
+carlesso
+joonhwan
+adamkrellenstein
+corrius
+ogulcancelik
+yianL
+olafkfreund
+Pimpmuckl
+season179
