@@ -11,6 +11,7 @@ use crate::api::schema::{
 mod agent;
 mod api;
 mod completion;
+mod help_text;
 mod integration;
 mod notification;
 mod pane;
