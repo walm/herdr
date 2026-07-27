@@ -43,7 +43,7 @@ pub(super) fn command() -> Command {
         .subcommand(session_command())
         .subcommand(integration_command())
         .subcommand(plugin_command());
-    configure_help(command, true)
+    super::help_text::apply(configure_help(command, true))
 }
 
 fn configure_help(command: Command, root: bool) -> Command {
@@ -69,6 +69,9 @@ fn write_requested_help(args: &[String], output: &mut impl Write) -> std::io::Re
     else {
         return Ok(false);
     };
+    // `-h` stays terse for humans skimming; `--help` carries the examples that
+    // make the CLI discoverable to agents exploring it.
+    let long = args[help_index] == "--help";
     if help_index < 2 {
         return Ok(false);
     }
@@ -94,7 +97,11 @@ fn write_requested_help(args: &[String], output: &mut impl Write) -> std::io::Re
     }
 
     selected.set_bin_name(path.join(" "));
-    selected.write_long_help(&mut *output)?;
+    if long {
+        selected.write_long_help(&mut *output)?;
+    } else {
+        selected.write_help(&mut *output)?;
+    }
     writeln!(output)?;
     Ok(true)
 }
@@ -668,8 +675,7 @@ fn report_metadata_command() -> Command {
         .arg(option("display-agent", "TEXT"))
         .arg(flag("clear-display-agent"))
         .arg(
-            option("marker", "TEXT")
-                .help("Short glyph for the tab bar and sidebar, max 2 columns"),
+            option("marker", "TEXT").help("Short glyph for the tab bar and sidebar, max 2 columns"),
         )
         .arg(flag("clear-marker").help("Clear a previously reported marker"))
         .arg(option("state-label", "STATUS=TEXT"))
@@ -678,12 +684,6 @@ fn report_metadata_command() -> Command {
         .arg(repeatable_option("clear-token", "NAME"))
         .arg(option("seq", "N"))
         .arg(option("ttl-ms", "N"))
-        .after_help(
-            "EXAMPLES:\n  \
-             herdr pane report-metadata \"$HERDR_PANE_ID\" --source build --marker \"OK\"\n  \
-             herdr pane report-metadata \"$HERDR_PANE_ID\" --source build --clear-marker\n  \
-             herdr pane report-metadata \"$HERDR_PANE_ID\" --source build --marker \"!\" --ttl-ms 30000",
-        )
 }
 
 fn terminal_command() -> Command {
@@ -1332,5 +1332,70 @@ mod tests {
             clap_complete::generate(shell, &mut cmd, "herdr", &mut output);
             assert!(!output.is_empty(), "empty {shell:?} completion output");
         }
+    }
+}
+
+#[cfg(test)]
+mod help_text_tests {
+    use clap::Command;
+
+    fn assert_args_documented(cmd: &Command, path: &mut Vec<String>, missing: &mut Vec<String>) {
+        for arg in cmd.get_arguments() {
+            // clap injects these; only our own arguments are our problem.
+            if matches!(arg.get_id().as_str(), "help" | "version") {
+                continue;
+            }
+            if arg.get_help().is_none() {
+                missing.push(format!("herdr {} --{}", path.join(" "), arg.get_id()));
+            }
+        }
+        for subcommand in cmd.get_subcommands() {
+            path.push(subcommand.get_name().to_string());
+            assert_args_documented(subcommand, path, missing);
+            path.pop();
+        }
+    }
+
+    /// Every flag an agent can reach through `--help` must explain itself. New
+    /// arguments need an entry in `help_text`; this is what tells you so.
+    #[test]
+    fn every_argument_has_help_text() {
+        let cmd = super::command();
+        let mut missing = Vec::new();
+        assert_args_documented(&cmd, &mut Vec::new(), &mut missing);
+        assert!(
+            missing.is_empty(),
+            "arguments without help text ({}):\n  {}",
+            missing.len(),
+            missing.join("\n  ")
+        );
+    }
+
+    #[test]
+    fn long_help_carries_examples_and_short_help_does_not() {
+        let mut cmd = super::command();
+        let mut pane = cmd
+            .find_subcommand_mut("pane")
+            .expect("pane command")
+            .clone();
+        let long = pane.render_long_help().to_string();
+        assert!(long.contains("EXAMPLES:"), "{long}");
+        let short = pane.render_help().to_string();
+        assert!(!short.contains("EXAMPLES:"), "{short}");
+    }
+
+    /// The marker flag is the kind of thing an agent only finds through help.
+    #[test]
+    fn report_metadata_help_documents_marker_with_examples() {
+        let mut cmd = super::command();
+        let mut report = cmd
+            .find_subcommand_mut("pane")
+            .and_then(|pane| pane.find_subcommand_mut("report-metadata"))
+            .expect("report-metadata command")
+            .clone();
+        let long = report.render_long_help().to_string();
+        assert!(long.contains("--marker"), "{long}");
+        assert!(long.contains("--clear-marker"), "{long}");
+        assert!(long.contains("HERDR_PANE_ID"), "{long}");
     }
 }

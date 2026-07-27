@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Every CLI argument now carries help text, and `--help` appends copy-pasteable EXAMPLES while `-h` stays terse. Help text lives in a lookup table applied to the command spec, so `herdr <command> --help` documents every flag an agent or script can reach.
+
 ### Changed
 - Relicensed Herdr from AGPL-3.0-or-later to Apache-2.0.
 
