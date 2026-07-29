@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Panes can be pinned so closing them asks first. Pin from the pane right-click menu or with `herdr pane pin <pane>`; a pinned pane shows a marker on its border, and closing its tab or workspace asks too. Unpinned panes close immediately as before. `herdr pane close --force` skips the prompt, and pins persist across restarts.
+
 - Every CLI argument now carries help text, and `--help` appends copy-pasteable EXAMPLES while `-h` stays terse. Help text lives in a lookup table applied to the command spec, so `herdr <command> --help` documents every flag an agent or script can reach.
 
 ### Changed

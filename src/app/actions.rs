@@ -2062,6 +2062,17 @@ impl AppState {
             })
     }
 
+    /// Whether closing this workspace should ask first. A pinned pane always
+    /// asks: pinning is an explicit per-pane request that outranks the global
+    /// `ui.confirm_close` default.
+    pub(crate) fn should_confirm_workspace_close(&self, ws_idx: usize) -> bool {
+        self.confirm_close
+            || self
+                .workspaces
+                .get(ws_idx)
+                .is_some_and(crate::workspace::Workspace::has_pinned_pane)
+    }
+
     pub(crate) fn confirm_implicit_worktree_group_close(&mut self, ws_idx: usize) -> bool {
         if self.confirm_close && self.workspace_close_would_close_worktree_group(ws_idx) {
             self.selected = ws_idx;
@@ -6058,6 +6069,22 @@ mod tests {
         assert_eq!(state.workspaces[0].display_name(), "selected");
         assert!(!state.terminals.contains_key(&active_terminal_id));
         state.assert_invariants_for_test();
+    }
+
+    #[test]
+    fn workspace_with_a_pinned_pane_confirms_even_when_confirm_close_is_off() {
+        let mut state = app_with_workspaces(&["main"]);
+        state.confirm_close = false;
+        let pane_id = state.workspaces[0].focused_pane_id().unwrap();
+
+        assert!(!state.should_confirm_workspace_close(0));
+
+        state.workspaces[0].set_pane_pinned(pane_id, true);
+
+        assert!(
+            state.should_confirm_workspace_close(0),
+            "an explicit pin outranks confirm_close = false"
+        );
     }
 
     #[test]

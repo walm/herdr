@@ -1254,6 +1254,7 @@ pub enum ContextMenuKind {
         pane_id: PaneId,
         source_pane_id: Option<PaneId>,
         has_manual_label: bool,
+        pinned: bool,
     },
     /// Color-picker submenu for a workspace's tab-bar label.
     WorkspaceColor {
@@ -1324,54 +1325,96 @@ impl ContextMenuState {
             ],
             ContextMenuKind::Tab { .. } => &["New tab", "Rename", "Close"],
             ContextMenuKind::Pane {
-                has_manual_label: true,
-                source_pane_id: Some(_),
+                has_manual_label,
+                source_pane_id,
+                pinned,
                 ..
-            } => &[
-                "Rename pane",
-                "Clear pane name",
-                "Swap with focused pane",
-                "Split right",
-                "Split down",
-                "Zoom",
-                "Close pane",
-            ],
-            ContextMenuKind::Pane {
-                has_manual_label: false,
-                source_pane_id: Some(_),
-                ..
-            } => &[
-                "Rename pane",
-                "Swap with focused pane",
-                "Split right",
-                "Split down",
-                "Zoom",
-                "Close pane",
-            ],
-            ContextMenuKind::Pane {
-                has_manual_label: true,
-                source_pane_id: None,
-                ..
-            } => &[
-                "Rename pane",
-                "Clear pane name",
-                "Split right",
-                "Split down",
-                "Zoom",
-                "Close pane",
-            ],
-            ContextMenuKind::Pane {
-                has_manual_label: false,
-                source_pane_id: None,
-                ..
-            } => &[
-                "Rename pane",
-                "Split right",
-                "Split down",
-                "Zoom",
-                "Close pane",
-            ],
+            } => pane_menu_items(has_manual_label, source_pane_id.is_some(), pinned),
         }
+    }
+}
+
+/// Pane context-menu items. The pin entry names the action it performs, so it
+/// flips with the pane's current state; "Clear pane name" and "Swap with focused
+/// pane" only appear when they apply.
+fn pane_menu_items(
+    has_manual_label: bool,
+    has_source_pane: bool,
+    pinned: bool,
+) -> &'static [&'static str] {
+    match (has_manual_label, has_source_pane, pinned) {
+        (true, true, false) => &[
+            "Rename pane",
+            "Clear pane name",
+            "Swap with focused pane",
+            "Split right",
+            "Split down",
+            "Zoom",
+            "Pin pane",
+            "Close pane",
+        ],
+        (true, true, true) => &[
+            "Rename pane",
+            "Clear pane name",
+            "Swap with focused pane",
+            "Split right",
+            "Split down",
+            "Zoom",
+            "Unpin pane",
+            "Close pane",
+        ],
+        (false, true, false) => &[
+            "Rename pane",
+            "Swap with focused pane",
+            "Split right",
+            "Split down",
+            "Zoom",
+            "Pin pane",
+            "Close pane",
+        ],
+        (false, true, true) => &[
+            "Rename pane",
+            "Swap with focused pane",
+            "Split right",
+            "Split down",
+            "Zoom",
+            "Unpin pane",
+            "Close pane",
+        ],
+        (true, false, false) => &[
+            "Rename pane",
+            "Clear pane name",
+            "Split right",
+            "Split down",
+            "Zoom",
+            "Pin pane",
+            "Close pane",
+        ],
+        (true, false, true) => &[
+            "Rename pane",
+            "Clear pane name",
+            "Split right",
+            "Split down",
+            "Zoom",
+            "Unpin pane",
+            "Close pane",
+        ],
+        (false, false, false) => &[
+            "Rename pane",
+            "Split right",
+            "Split down",
+            "Zoom",
+            "Pin pane",
+            "Close pane",
+        ],
+        (false, false, true) => &[
+            "Rename pane",
+            "Split right",
+            "Split down",
+            "Zoom",
+            "Unpin pane",
+            "Close pane",
+        ],
     }
 }
 
@@ -2607,5 +2650,33 @@ mod tests {
                 "Collapse"
             ]
         );
+    }
+    #[test]
+    fn pane_menu_pin_item_reflects_current_state() {
+        let unpinned = pane_menu_items(false, false, false);
+        assert!(unpinned.contains(&"Pin pane"));
+        assert!(!unpinned.contains(&"Unpin pane"));
+
+        let pinned = pane_menu_items(false, false, true);
+        assert!(pinned.contains(&"Unpin pane"));
+        assert!(!pinned.contains(&"Pin pane"));
+
+        // The pin entry sits directly above Close pane in every combination.
+        for has_label in [false, true] {
+            for has_source in [false, true] {
+                for is_pinned in [false, true] {
+                    let items = pane_menu_items(has_label, has_source, is_pinned);
+                    let pin = items
+                        .iter()
+                        .position(|item| *item == "Pin pane" || *item == "Unpin pane")
+                        .expect("pin entry");
+                    let close = items
+                        .iter()
+                        .position(|item| *item == "Close pane")
+                        .expect("close entry");
+                    assert_eq!(pin + 1, close, "{items:?}");
+                }
+            }
+        }
     }
 }

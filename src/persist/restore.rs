@@ -562,7 +562,9 @@ fn restore_tab(
                     std::time::Instant::now(),
                 );
             }
-            panes.insert(*id, PaneState::new(terminal_id));
+            let mut pane_state = PaneState::new(terminal_id);
+            pane_state.pinned = saved_pane.is_some_and(|pane| pane.pinned);
+            panes.insert(*id, pane_state);
             terminals.push(terminal);
             continue;
         }
@@ -658,7 +660,9 @@ fn restore_tab(
                         std::time::Instant::now(),
                     );
                 }
-                panes.insert(*id, PaneState::new(terminal_id.clone()));
+                let mut pane_state = PaneState::new(terminal_id.clone());
+                pane_state.pinned = saved_pane.is_some_and(|pane| pane.pinned);
+                panes.insert(*id, pane_state);
                 terminal_runtimes.insert(terminal_id, runtime);
                 terminals.push(terminal);
             }
@@ -1198,6 +1202,7 @@ mod tests {
                                 value: "opencode-session".into(),
                             }),
                             launch_argv: None,
+                            pinned: false,
                         },
                     )]),
                     zoomed: false,
@@ -1280,6 +1285,7 @@ mod tests {
                                 managed_agent_kind: None,
                                 agent_session: None,
                                 launch_argv: None,
+                                pinned: false,
                             },
                         ),
                         (
@@ -1291,6 +1297,7 @@ mod tests {
                                 managed_agent_kind: None,
                                 agent_session: None,
                                 launch_argv: None,
+                                pinned: false,
                             },
                         ),
                     ]),
@@ -1344,6 +1351,7 @@ mod tests {
                     managed_agent_kind: None,
                     agent_session: None,
                     launch_argv: None,
+                    pinned: false,
                 },
             )
         };
@@ -1359,6 +1367,7 @@ mod tests {
                 value: "codex-session".into(),
             }),
             launch_argv: None,
+            pinned: false,
         };
         let snapshot = SessionSnapshot {
             version: super::super::snapshot::SNAPSHOT_VERSION,
@@ -1513,6 +1522,7 @@ mod tests {
                                 value: "codex-session".into(),
                             }),
                             launch_argv: None,
+                            pinned: false,
                         },
                     )]),
                     zoomed: false,
@@ -1674,6 +1684,7 @@ mod tests {
                 managed_agent_kind: None,
                 agent_session: None,
                 launch_argv: None,
+                pinned: false,
             },
         );
         let history = SessionHistorySnapshot {

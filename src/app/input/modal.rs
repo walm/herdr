@@ -770,6 +770,21 @@ fn open_workspace_color_menu(state: &mut AppState, ws_idx: usize, x: u16, y: u16
     state.mode = Mode::ContextMenu;
 }
 
+/// Pin or unpin a pane and close the menu. Pinned panes ask before closing.
+fn apply_pane_pinned(
+    state: &mut AppState,
+    ws_idx: usize,
+    pane_id: crate::layout::PaneId,
+    pinned: bool,
+) {
+    if let Some(ws) = state.workspaces.get_mut(ws_idx) {
+        if ws.set_pane_pinned(pane_id, pinned).is_some() {
+            state.mark_session_dirty();
+        }
+    }
+    leave_modal(state);
+}
+
 /// Apply a chosen color (or "none" → clear) to a workspace and close the menu.
 fn apply_workspace_color(state: &mut AppState, ws_idx: usize, item: Option<&str>) {
     let color = item.and_then(|name| {
@@ -848,7 +863,7 @@ pub(super) fn apply_context_menu_action(
             Some("Close" | "Close group"),
         ) => {
             state.selected = ws_idx;
-            if state.confirm_close {
+            if state.should_confirm_workspace_close(ws_idx) {
                 open_confirm_close(state);
             } else {
                 state.close_selected_workspace();
@@ -881,6 +896,14 @@ pub(super) fn apply_context_menu_action(
         }
         (ContextMenuKind::Pane { pane_id, .. }, Some("Rename pane")) => {
             open_rename_pane(state, pane_id);
+        }
+        (
+            ContextMenuKind::Pane {
+                ws_idx, pane_id, ..
+            },
+            Some(item @ ("Pin pane" | "Unpin pane")),
+        ) => {
+            apply_pane_pinned(state, ws_idx, pane_id, item == "Pin pane");
         }
         (
             ContextMenuKind::Pane {
@@ -1289,7 +1312,7 @@ impl App {
                 Some("Close" | "Close group"),
             ) => {
                 self.state.selected = ws_idx;
-                if self.state.confirm_close {
+                if self.state.should_confirm_workspace_close(ws_idx) {
                     open_confirm_close(&mut self.state);
                 } else {
                     self.close_workspace_idx_via_api(ws_idx);
@@ -1315,6 +1338,14 @@ impl App {
             }
             (ContextMenuKind::Pane { pane_id, .. }, Some("Rename pane")) => {
                 open_rename_pane(&mut self.state, pane_id);
+            }
+            (
+                ContextMenuKind::Pane {
+                    ws_idx, pane_id, ..
+                },
+                Some(item @ ("Pin pane" | "Unpin pane")),
+            ) => {
+                apply_pane_pinned(&mut self.state, ws_idx, pane_id, item == "Pin pane");
             }
             (
                 ContextMenuKind::Pane {
@@ -2298,6 +2329,7 @@ mod tests {
                 pane_id,
                 source_pane_id: None,
                 has_manual_label: false,
+                pinned: false,
             },
             x: 0,
             y: 0,
@@ -2363,6 +2395,7 @@ mod tests {
                 pane_id,
                 source_pane_id: None,
                 has_manual_label: false,
+                pinned: false,
             },
             x: 0,
             y: 0,

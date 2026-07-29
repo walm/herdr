@@ -200,7 +200,9 @@ pub enum Method {
     #[serde(rename = "pane.release_agent")]
     PaneReleaseAgent(PaneReleaseAgentParams),
     #[serde(rename = "pane.close")]
-    PaneClose(PaneTarget),
+    PaneClose(PaneCloseParams),
+    #[serde(rename = "pane.set_pinned")]
+    PaneSetPinned(PaneSetPinnedParams),
     #[serde(rename = "popup.close")]
     PopupClose(EmptyParams),
     #[serde(rename = "events.subscribe")]

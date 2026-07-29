@@ -493,6 +493,8 @@ impl App {
             &crate::api::schema::PaneTarget {
                 pane_id: pane_id.clone(),
             },
+            // Plugin panes are owned by the plugin lifecycle, not by user pins.
+            true,
         ) {
             return response;
         }

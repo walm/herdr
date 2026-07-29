@@ -1225,6 +1225,26 @@ impl Workspace {
         self.tabs.iter().find_map(|tab| tab.panes.get(&pane_id))
     }
 
+    pub fn pane_is_pinned(&self, pane_id: PaneId) -> bool {
+        self.pane_state(pane_id).is_some_and(|pane| pane.pinned)
+    }
+
+    /// Any pinned pane anywhere in this workspace. Closing the workspace would
+    /// take them with it, so this gates the workspace close confirmation.
+    pub fn has_pinned_pane(&self) -> bool {
+        self.tabs.iter().any(Tab::has_pinned_pane)
+    }
+
+    /// Returns the new pinned state, or `None` when the pane does not exist.
+    pub fn set_pane_pinned(&mut self, pane_id: PaneId, pinned: bool) -> Option<bool> {
+        let pane = self
+            .tabs
+            .iter_mut()
+            .find_map(|tab| tab.panes.get_mut(&pane_id))?;
+        pane.pinned = pinned;
+        Some(pinned)
+    }
+
     pub fn terminal_id(&self, pane_id: PaneId) -> Option<&TerminalId> {
         self.tabs.iter().find_map(|tab| tab.terminal_id(pane_id))
     }

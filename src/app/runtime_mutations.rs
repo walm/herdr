@@ -106,7 +106,13 @@ impl App {
     }
 
     pub(crate) fn runtime_pane_close(&mut self, id: &'static str, pane_id: String) -> String {
-        self.dispatch_runtime_mutation(id, Method::PaneClose(PaneTarget { pane_id }))
+        self.dispatch_runtime_mutation(
+            id,
+            Method::PaneClose(crate::api::schema::PaneCloseParams {
+                pane_id,
+                force: false,
+            }),
+        )
     }
 
     pub(crate) fn runtime_pane_rename(

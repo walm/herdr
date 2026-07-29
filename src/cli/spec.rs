@@ -571,7 +571,22 @@ fn pane_command() -> Command {
                 .arg(flag("focus"))
                 .arg(flag("no-focus")),
         )
-        .subcommand(id_command("close", "pane_id", "Close a pane"))
+        .subcommand(
+            Command::new("close")
+                .about("Close a pane")
+                .arg(required("pane_id", "PANE_ID"))
+                .arg(flag("force")),
+        )
+        .subcommand(
+            Command::new("pin")
+                .about("Pin a pane so closing it asks first")
+                .arg(required("pane_id", "PANE_ID")),
+        )
+        .subcommand(
+            Command::new("unpin")
+                .about("Unpin a pane")
+                .arg(required("pane_id", "PANE_ID")),
+        )
         .subcommand(
             Command::new("send-text")
                 .about("Send literal text to a pane")
