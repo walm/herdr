@@ -1592,6 +1592,7 @@ impl App {
             // interactive client raises its dialog, and return an error so a
             // script sees the refusal instead of silently destroying the pane.
             self.state.selected = ws_idx;
+            self.state.confirm_close_target = crate::app::state::ConfirmCloseTarget::Pane(pane_id);
             self.state.mode = crate::app::state::Mode::ConfirmClose;
             return Err(encode_error(
                 id,

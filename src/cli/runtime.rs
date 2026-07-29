@@ -69,8 +69,11 @@ pub(super) fn tab_rename(params: TabRenameParams) -> std::io::Result<i32> {
     print_method_response("cli:tab:rename", Method::TabRename(params))
 }
 
-pub(super) fn tab_close(tab_id: String) -> std::io::Result<i32> {
-    print_method_response("cli:tab:close", Method::TabClose(TabTarget { tab_id }))
+pub(super) fn tab_close(tab_id: String, force: bool) -> std::io::Result<i32> {
+    print_method_response(
+        "cli:tab:close",
+        Method::TabClose(crate::api::schema::TabCloseParams { tab_id, force }),
+    )
 }
 
 pub(super) fn worktree_list(params: WorktreeListParams) -> std::io::Result<i32> {

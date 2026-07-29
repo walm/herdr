@@ -601,6 +601,46 @@ fn confirm_close_overlay_text(
     app: &AppState,
     terminal_runtimes: &TerminalRuntimeRegistry,
 ) -> (String, String) {
+    // A pinned pane or tab confirms through this same dialog, so say what is
+    // actually about to close rather than describing the workspace.
+    match app.confirm_close_target {
+        crate::app::state::ConfirmCloseTarget::Pane(pane_id) => {
+            let label = app
+                .workspaces
+                .get(app.selected)
+                .and_then(|ws| ws.pane_state(pane_id))
+                .and_then(|pane| app.terminals.get(&pane.attached_terminal_id))
+                .and_then(|terminal| {
+                    terminal
+                        .manual_label
+                        .clone()
+                        .or_else(|| terminal.effective_agent_label().map(str::to_string))
+                })
+                .unwrap_or_else(|| "pane".to_string());
+            return ("Close pinned pane?".to_string(), label);
+        }
+        crate::app::state::ConfirmCloseTarget::Tab(tab_idx) => {
+            let ws = app.workspaces.get(app.selected);
+            let tab_name = ws
+                .and_then(|ws| ws.tab_display_name(tab_idx))
+                .unwrap_or_else(|| (tab_idx + 1).to_string());
+            let pane_count = ws
+                .and_then(|ws| ws.tabs.get(tab_idx))
+                .map(|tab| tab.layout.pane_count())
+                .unwrap_or(0);
+            let pane_text = if pane_count == 1 {
+                "1 pane".to_string()
+            } else {
+                format!("{pane_count} panes")
+            };
+            return (
+                "Close tab with pinned pane?".to_string(),
+                format!("{tab_name} — {pane_text}"),
+            );
+        }
+        crate::app::state::ConfirmCloseTarget::Workspace => {}
+    }
+
     let ws_name = app
         .workspaces
         .get(app.selected)

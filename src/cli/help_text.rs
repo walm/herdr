@@ -210,6 +210,11 @@ const SPECIFIC: &[(&str, &str, &str)] = &[
     ("worktree list", "cwd", "Repository to inspect"),
     ("tab list", "workspace", "Limit to this workspace"),
     ("tab rename", "label", "New tab name"),
+    (
+        "tab close",
+        "force",
+        "Close even when the tab holds a pinned pane",
+    ),
     // misc leaf commands
     ("channel set", "channel", "Update channel to follow"),
     (

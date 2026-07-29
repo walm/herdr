@@ -1418,6 +1418,19 @@ fn pane_menu_items(
     }
 }
 
+/// What the close confirmation is about to close.
+///
+/// The dialog and its accept action are shared, so this keeps "close this pinned
+/// pane" from running the workspace close.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum ConfirmCloseTarget {
+    #[default]
+    Workspace,
+    Pane(PaneId),
+    /// Tab index within the selected workspace.
+    Tab(usize),
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ToastKind {
     NeedsAttention,
@@ -1616,6 +1629,7 @@ pub struct AppState {
     pub redraw_on_focus_gained: bool,
     pub mouse_scroll_lines: usize,
     pub confirm_close: bool,
+    pub confirm_close_target: ConfirmCloseTarget,
     pub prompt_new_tab_name: bool,
     pub prompt_new_workspace_name: bool,
     pub pane_borders: bool,
@@ -1999,6 +2013,7 @@ impl AppState {
             redraw_on_focus_gained: true,
             mouse_scroll_lines: crate::config::DEFAULT_MOUSE_SCROLL_LINES,
             confirm_close: true,
+            confirm_close_target: ConfirmCloseTarget::default(),
             prompt_new_tab_name: true,
             prompt_new_workspace_name: false,
             pane_borders: true,

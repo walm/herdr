@@ -664,6 +664,7 @@ impl App {
             redraw_on_focus_gained: config.ui.redraw_on_focus_gained,
             mouse_scroll_lines: config.ui.mouse_scroll_lines(),
             confirm_close: config.ui.confirm_close,
+            confirm_close_target: crate::app::state::ConfirmCloseTarget::default(),
             prompt_new_tab_name: config.ui.prompt_new_tab_name,
             prompt_new_workspace_name: config.ui.prompt_new_workspace_name,
             pane_borders: config.ui.pane_borders,

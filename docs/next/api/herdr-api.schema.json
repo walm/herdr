@@ -4056,6 +4056,22 @@
             }
           ]
         },
+        "TabCloseParams": {
+          "properties": {
+            "force": {
+              "default": false,
+              "description": "Close even when the tab holds a pinned pane.",
+              "type": "boolean"
+            },
+            "tab_id": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "tab_id"
+          ],
+          "type": "object"
+        },
         "TabCreateParams": {
           "properties": {
             "cwd": {
@@ -4905,7 +4921,7 @@
               "type": "string"
             },
             "params": {
-              "$ref": "#/schemas/request/$defs/TabTarget"
+              "$ref": "#/schemas/request/$defs/TabCloseParams"
             }
           },
           "required": [

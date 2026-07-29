@@ -299,7 +299,12 @@ fn tab_command() -> Command {
                 .arg(required("tab_id", "TAB_ID"))
                 .arg(required("label", "LABEL").num_args(1..)),
         )
-        .subcommand(id_command("close", "tab_id", "Close a tab"))
+        .subcommand(
+            Command::new("close")
+                .about("Close a tab")
+                .arg(required("tab_id", "TAB_ID"))
+                .arg(flag("force")),
+        )
 }
 
 fn notification_command() -> Command {

@@ -2076,6 +2076,7 @@ impl AppState {
     pub(crate) fn confirm_implicit_worktree_group_close(&mut self, ws_idx: usize) -> bool {
         if self.confirm_close && self.workspace_close_would_close_worktree_group(ws_idx) {
             self.selected = ws_idx;
+            self.confirm_close_target = crate::app::state::ConfirmCloseTarget::Workspace;
             self.mode = Mode::ConfirmClose;
             true
         } else {

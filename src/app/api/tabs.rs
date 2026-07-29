@@ -238,7 +238,15 @@ impl App {
         encode_success(id, ResponseResult::TabList { tabs })
     }
 
-    pub(super) fn handle_tab_close(&mut self, id: String, target: TabTarget) -> String {
+    pub(super) fn handle_tab_close(
+        &mut self,
+        id: String,
+        params: crate::api::schema::TabCloseParams,
+    ) -> String {
+        let force = params.force;
+        let target = TabTarget {
+            tab_id: params.tab_id,
+        };
         let Some((ws_idx, tab_idx)) = self.parse_tab_id(&target.tab_id) else {
             return tab_not_found(id, &target.tab_id);
         };
@@ -261,11 +269,12 @@ impl App {
             .map(|tab| tab.layout.pane_ids())
             .unwrap_or_default();
 
-        if tab_has_pinned_pane {
+        if tab_has_pinned_pane && !force {
             // Closing the tab closes every pane in it, so one pinned pane makes
             // the whole tab ask. Mode drives the interactive dialog; the error
             // is what a script sees.
             self.state.selected = ws_idx;
+            self.state.confirm_close_target = crate::app::state::ConfirmCloseTarget::Tab(tab_idx);
             self.state.mode = crate::app::state::Mode::ConfirmClose;
             return encode_error(id, "confirmation_required", "tab contains a pinned pane");
         }
@@ -377,7 +386,13 @@ mod tests {
         app.state.workspaces[0].set_pane_pinned(pane_id, true);
         let tab_id = app.public_tab_id(0, 0).unwrap();
 
-        let response = app.handle_tab_close("req".into(), TabTarget { tab_id });
+        let response = app.handle_tab_close(
+            "req".into(),
+            crate::api::schema::TabCloseParams {
+                tab_id,
+                force: false,
+            },
+        );
 
         assert!(response.contains("confirmation_required"), "{response}");
         assert_eq!(app.state.mode, crate::app::state::Mode::ConfirmClose);
@@ -401,8 +416,9 @@ mod tests {
 
         let response = app.handle_tab_close(
             "req".into(),
-            TabTarget {
+            crate::api::schema::TabCloseParams {
                 tab_id: tab_id.clone(),
+                force: false,
             },
         );
 
