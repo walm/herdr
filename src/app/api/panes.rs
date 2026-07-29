@@ -125,7 +125,12 @@ impl App {
 
     pub(super) fn handle_pane_list(&mut self, id: String, params: PaneListParams) -> String {
         match self.collect_panes_for_workspace(params.workspace_id.as_deref()) {
-            Ok(panes) => encode_success(id, ResponseResult::PaneList { panes }),
+            Ok(mut panes) => {
+                if let Some(pinned) = params.pinned {
+                    panes.retain(|pane| pane.pinned == pinned);
+                }
+                encode_success(id, ResponseResult::PaneList { panes })
+            }
             Err((code, message)) => encode_error(id, &code, message),
         }
     }
@@ -4154,6 +4159,38 @@ mod tests {
             crate::app::state::Mode::ConfirmClose,
             "an unpinned pane must not raise a dialog"
         );
+    }
+
+    #[test]
+    fn api_pane_list_filters_by_pinned_state() {
+        let (mut app, _) = app_with_test_workspace();
+        let first = app.state.workspaces[0].tabs[0].root_pane;
+        let second = app.state.workspaces[0].test_split(ratatui::layout::Direction::Horizontal);
+        app.state.ensure_test_terminals();
+        app.state.workspaces[0].set_pane_pinned(second, true);
+
+        let all = app.handle_pane_list("req".into(), PaneListParams::default());
+        assert_eq!(all.matches("\"pane_id\"").count(), 2, "{all}");
+
+        let pinned = app.handle_pane_list(
+            "req".into(),
+            PaneListParams {
+                workspace_id: None,
+                pinned: Some(true),
+            },
+        );
+        assert_eq!(pinned.matches("\"pane_id\"").count(), 1, "{pinned}");
+        assert!(pinned.contains("\"pinned\":true"), "{pinned}");
+
+        let unpinned = app.handle_pane_list(
+            "req".into(),
+            PaneListParams {
+                workspace_id: None,
+                pinned: Some(false),
+            },
+        );
+        assert_eq!(unpinned.matches("\"pane_id\"").count(), 1, "{unpinned}");
+        let _ = first;
     }
 
     #[test]

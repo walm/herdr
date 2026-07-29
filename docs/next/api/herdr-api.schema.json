@@ -2568,6 +2568,13 @@
         },
         "PaneListParams": {
           "properties": {
+            "pinned": {
+              "description": "Filter by pinned state. `None` lists every pane.",
+              "type": [
+                "boolean",
+                "null"
+              ]
+            },
             "workspace_id": {
               "type": [
                 "string",

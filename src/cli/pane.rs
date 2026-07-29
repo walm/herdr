@@ -54,10 +54,19 @@ pub(super) fn run_pane_command(args: &[String]) -> std::io::Result<i32> {
 
 fn pane_list(args: &[String]) -> std::io::Result<i32> {
     let mut workspace_id = None;
+    let mut pinned = None;
 
     let mut index = 0;
     while index < args.len() {
         match args[index].as_str() {
+            "--pinned" => {
+                pinned = Some(true);
+                index += 1;
+            }
+            "--unpinned" => {
+                pinned = Some(false);
+                index += 1;
+            }
             "--workspace" => {
                 let Some(value) = args.get(index + 1) else {
                     eprintln!("missing value for --workspace");
@@ -75,7 +84,10 @@ fn pane_list(args: &[String]) -> std::io::Result<i32> {
 
     super::print_response(&super::send_request(&Request {
         id: "cli:pane:list".into(),
-        method: Method::PaneList(PaneListParams { workspace_id }),
+        method: Method::PaneList(PaneListParams {
+            workspace_id,
+            pinned,
+        }),
     })?)
 }
 

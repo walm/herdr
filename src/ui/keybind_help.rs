@@ -158,6 +158,7 @@ pub(super) fn keybind_help_groups(app: &AppState) -> Vec<HelpGroup> {
         ),
         help_entry(keybind_label(&kb.last_pane), "last pane"),
         help_entry(keybind_label(&kb.last_pane_in_tab), "last pane in tab"),
+        help_entry(keybind_label(&kb.toggle_pin_pane), "pin/unpin pane"),
     ];
     groups.push(("panes", panes));
 

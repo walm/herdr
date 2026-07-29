@@ -347,6 +347,7 @@ pub struct Keybinds {
     pub cycle_pane_previous: ActionKeybinds,
     pub last_pane: ActionKeybinds,
     pub last_pane_in_tab: ActionKeybinds,
+    pub toggle_pin_pane: ActionKeybinds,
     pub split_vertical: ActionKeybinds,
     pub split_horizontal: ActionKeybinds,
     pub close_pane: ActionKeybinds,
@@ -511,6 +512,7 @@ impl Config {
             cycle_pane_previous: empty_action!(),
             last_pane: empty_action!(),
             last_pane_in_tab: empty_action!(),
+            toggle_pin_pane: empty_action!(),
             split_vertical: empty_action!(),
             split_horizontal: empty_action!(),
             close_pane: empty_action!(),
@@ -652,6 +654,7 @@ impl Config {
             apply_action!(keybinds.swap_pane_right, swap_pane_right, source);
             apply_action!(keybinds.last_pane, last_pane, source);
             apply_action!(keybinds.last_pane_in_tab, last_pane_in_tab, source);
+            apply_action!(keybinds.toggle_pin_pane, toggle_pin_pane, source);
             apply_action!(keybinds.cycle_pane_next, cycle_pane_next, source);
             apply_action!(keybinds.cycle_pane_previous, cycle_pane_previous, source);
             apply_action!(keybinds.split_vertical, split_vertical, source);
@@ -1609,6 +1612,31 @@ next_tab = "prefix+n"
         let kb = Config::default().keybinds();
         assert!(kb.last_pane.bindings.is_empty());
         assert!(kb.last_pane_in_tab.bindings.is_empty());
+    }
+
+    #[test]
+    fn toggle_pin_pane_is_unset_by_default_and_can_be_configured() {
+        let kb = Config::default().keybinds();
+        assert!(
+            kb.toggle_pin_pane.bindings.is_empty(),
+            "pinning must be opt-in"
+        );
+
+        let config: Config = toml::from_str(
+            r#"
+[keys]
+toggle_pin_pane = "prefix+P"
+"#,
+        )
+        .unwrap();
+        let kb = config.keybinds();
+        assert_eq!(
+            binding_triggers(&kb.toggle_pin_pane),
+            vec![BindingTrigger::Prefix((
+                KeyCode::Char('p'),
+                KeyModifiers::SHIFT
+            ))]
+        );
     }
 
     #[test]

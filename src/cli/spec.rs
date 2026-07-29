@@ -467,7 +467,9 @@ fn pane_command() -> Command {
         .subcommand(
             Command::new("list")
                 .about("List panes")
-                .arg(option("workspace", "WORKSPACE_ID")),
+                .arg(option("workspace", "WORKSPACE_ID"))
+                .arg(flag("pinned"))
+                .arg(flag("unpinned")),
         )
         .subcommand(
             Command::new("current")

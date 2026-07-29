@@ -87,6 +87,12 @@ const SPECIFIC: &[(&str, &str, &str)] = &[
     ),
     // pane
     ("pane list", "workspace", "Limit to this workspace"),
+    ("pane list", "pinned", "Only list pinned panes"),
+    (
+        "pane list",
+        "unpinned",
+        "Only list panes that are not pinned",
+    ),
     ("pane resize", "amount", "Fraction to resize by, e.g. 0.05"),
     (
         "pane zoom",

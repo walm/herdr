@@ -105,6 +105,18 @@ impl App {
         self.dispatch_runtime_mutation(id, Method::PaneFocus(PaneTarget { pane_id }))
     }
 
+    pub(crate) fn runtime_pane_set_pinned(
+        &mut self,
+        id: &'static str,
+        pane_id: String,
+        pinned: bool,
+    ) -> String {
+        self.dispatch_runtime_mutation(
+            id,
+            Method::PaneSetPinned(crate::api::schema::PaneSetPinnedParams { pane_id, pinned }),
+        )
+    }
+
     pub(crate) fn runtime_pane_close(&mut self, id: &'static str, pane_id: String) -> String {
         self.dispatch_runtime_mutation(
             id,

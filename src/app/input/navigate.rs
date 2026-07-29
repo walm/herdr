@@ -404,6 +404,10 @@ impl App {
                 self.last_pane_in_tab_via_api();
                 leave_navigate_mode(&mut self.state);
             }
+            NavigateAction::TogglePinPane => {
+                self.toggle_focused_pane_pin_via_api();
+                leave_navigate_mode(&mut self.state);
+            }
             NavigateAction::Help => super::modal::open_keybind_help(&mut self.state),
             NavigateAction::Settings => super::settings::open_settings(&mut self.state),
             NavigateAction::ReloadConfig => {
@@ -588,6 +592,21 @@ impl App {
         };
         self.runtime_pane_close("tui.pane.close", pane_id);
         self.state.mode == Mode::ConfirmClose
+    }
+
+    pub(crate) fn toggle_focused_pane_pin_via_api(&mut self) {
+        let Some((ws_idx, pane_id)) = self.focused_pane_target() else {
+            return;
+        };
+        let pinned = self
+            .state
+            .workspaces
+            .get(ws_idx)
+            .is_some_and(|ws| ws.pane_is_pinned(pane_id));
+        let Some(public_pane_id) = self.public_pane_id(ws_idx, pane_id) else {
+            return;
+        };
+        self.runtime_pane_set_pinned("tui.pane.set_pinned", public_pane_id, !pinned);
     }
 
     pub(crate) fn zoom_focused_pane_via_api(&mut self) {
@@ -1381,6 +1400,7 @@ pub(crate) enum NavigateAction {
     CyclePanePrevious,
     LastPane,
     LastPaneInTab,
+    TogglePinPane,
     LastTab,
     Help,
     Settings,
@@ -1519,6 +1539,7 @@ fn non_indexed_action_for_key(
         (&kb.swap_pane_right, NavigateAction::SwapPaneRight),
         (&kb.last_pane, NavigateAction::LastPane),
         (&kb.last_pane_in_tab, NavigateAction::LastPaneInTab),
+        (&kb.toggle_pin_pane, NavigateAction::TogglePinPane),
         (&kb.cycle_pane_next, NavigateAction::CyclePaneNext),
         (&kb.cycle_pane_previous, NavigateAction::CyclePanePrevious),
         (&kb.split_vertical, NavigateAction::SplitVertical),
@@ -1775,6 +1796,25 @@ pub(super) fn execute_navigate_action_in_context(
         }
         NavigateAction::LastPaneInTab => {
             state.last_pane_in_tab();
+            leave_navigate_mode(state);
+        }
+        NavigateAction::TogglePinPane => {
+            if let Some(ws_idx) = state.active {
+                if let Some(pane_id) = state
+                    .workspaces
+                    .get(ws_idx)
+                    .and_then(|ws| ws.focused_pane_id())
+                {
+                    let pinned = state
+                        .workspaces
+                        .get(ws_idx)
+                        .is_some_and(|ws| ws.pane_is_pinned(pane_id));
+                    if let Some(ws) = state.workspaces.get_mut(ws_idx) {
+                        ws.set_pane_pinned(pane_id, !pinned);
+                        state.mark_session_dirty();
+                    }
+                }
+            }
             leave_navigate_mode(state);
         }
         NavigateAction::LastTab => {
@@ -3241,6 +3281,29 @@ navigate_pane_down = "ctrl+j"
         assert_eq!(state.workspaces.len(), 1);
         assert_eq!(state.workspaces[0].display_name(), "main");
         assert_eq!(state.mode, Mode::Terminal);
+    }
+
+    #[tokio::test]
+    async fn toggle_pin_pane_action_flips_the_focused_pane_through_the_api() {
+        let mut app = app_with_test_workspaces(&["main"]);
+        app.state.active = Some(0);
+        app.state.selected = 0;
+        app.state.mode = Mode::Navigate;
+        let pane_id = app.state.workspaces[0].focused_pane_id().unwrap();
+        assert!(!app.state.workspaces[0].pane_is_pinned(pane_id));
+
+        app.execute_tui_navigate_action(NavigateAction::TogglePinPane, ActionContext::Navigate);
+        assert!(
+            app.state.workspaces[0].pane_is_pinned(pane_id),
+            "the action must pin through the runtime path the TUI uses"
+        );
+
+        app.state.mode = Mode::Navigate;
+        app.execute_tui_navigate_action(NavigateAction::TogglePinPane, ActionContext::Navigate);
+        assert!(
+            !app.state.workspaces[0].pane_is_pinned(pane_id),
+            "and unpin"
+        );
     }
 
     #[test]
