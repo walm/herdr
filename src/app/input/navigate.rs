@@ -484,14 +484,16 @@ impl App {
                 return true;
             }
             self.close_workspace_idx_via_api(ws_idx);
-            return false;
+            // The close may itself have raised a confirmation (a pinned pane in
+            // the last tab), so report it instead of clearing the mode.
+            return self.state.mode == Mode::ConfirmClose;
         }
         let tab_idx = self.state.workspaces[ws_idx].active_tab_index();
         let Some(tab_id) = self.public_tab_id(ws_idx, tab_idx) else {
             return false;
         };
         self.runtime_tab_close("tui.tab.close", tab_id);
-        false
+        self.state.mode == Mode::ConfirmClose
     }
 
     pub(crate) fn move_tab_via_api(
@@ -3281,6 +3283,44 @@ navigate_pane_down = "ctrl+j"
         assert_eq!(state.workspaces.len(), 1);
         assert_eq!(state.workspaces[0].display_name(), "main");
         assert_eq!(state.mode, Mode::Terminal);
+    }
+
+    #[tokio::test]
+    async fn closing_a_tab_with_a_pinned_pane_raises_the_dialog_instead_of_doing_nothing() {
+        let mut app = app_with_test_workspaces(&["main"]);
+        app.state.active = Some(0);
+        app.state.selected = 0;
+        app.state.mode = Mode::Navigate;
+        app.state.workspaces[0].test_add_tab(Some("second"));
+        app.state.ensure_test_terminals();
+        // Pin a pane in the tab we are about to close.
+        let tab_idx = app.state.workspaces[0].active_tab_index();
+        let pane_id = app.state.workspaces[0].tabs[tab_idx].root_pane;
+        app.state.workspaces[0].set_pane_pinned(pane_id, true);
+
+        let requires_confirmation = app.close_active_tab_via_api_requires_confirmation();
+
+        assert!(
+            requires_confirmation,
+            "the caller clears the mode when this reports false, making the close a no-op"
+        );
+        assert_eq!(app.state.mode, Mode::ConfirmClose);
+        assert_eq!(app.state.workspaces[0].tabs.len(), 2, "nothing closed yet");
+    }
+
+    #[tokio::test]
+    async fn closing_a_tab_without_pinned_panes_needs_no_confirmation() {
+        let mut app = app_with_test_workspaces(&["main"]);
+        app.state.active = Some(0);
+        app.state.selected = 0;
+        app.state.mode = Mode::Navigate;
+        app.state.workspaces[0].test_add_tab(Some("second"));
+        app.state.ensure_test_terminals();
+
+        let requires_confirmation = app.close_active_tab_via_api_requires_confirmation();
+
+        assert!(!requires_confirmation);
+        assert_eq!(app.state.workspaces[0].tabs.len(), 1, "tab closed outright");
     }
 
     #[tokio::test]
