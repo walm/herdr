@@ -227,7 +227,7 @@ impl App {
             NavigateAction::CloseWorkspace => {
                 if let Some(ws_idx) = workspace_action_target(&self.state, context) {
                     self.state.selected = ws_idx;
-                    if self.state.confirm_close {
+                    if self.state.should_confirm_workspace_close(ws_idx) {
                         super::modal::open_confirm_close(&mut self.state);
                     } else {
                         self.close_workspace_idx_via_api(ws_idx);
@@ -404,6 +404,10 @@ impl App {
                 self.last_pane_in_tab_via_api();
                 leave_navigate_mode(&mut self.state);
             }
+            NavigateAction::TogglePinPane => {
+                self.toggle_focused_pane_pin_via_api();
+                leave_navigate_mode(&mut self.state);
+            }
             NavigateAction::Help => super::modal::open_keybind_help(&mut self.state),
             NavigateAction::Settings => super::settings::open_settings(&mut self.state),
             NavigateAction::ReloadConfig => {
@@ -479,15 +483,24 @@ impl App {
             if self.state.confirm_implicit_worktree_group_close(ws_idx) {
                 return true;
             }
+            // Closing the last tab closes the workspace, so ask the workspace
+            // question. This branch never reaches the tab close API, so it must
+            // do its own check or a pinned pane would slip through unasked.
+            if self.state.should_confirm_workspace_close(ws_idx) {
+                self.state.selected = ws_idx;
+                self.state.confirm_close_target = crate::app::state::ConfirmCloseTarget::Workspace;
+                self.state.mode = Mode::ConfirmClose;
+                return true;
+            }
             self.close_workspace_idx_via_api(ws_idx);
-            return false;
+            return self.state.mode == Mode::ConfirmClose;
         }
         let tab_idx = self.state.workspaces[ws_idx].active_tab_index();
         let Some(tab_id) = self.public_tab_id(ws_idx, tab_idx) else {
             return false;
         };
         self.runtime_tab_close("tui.tab.close", tab_id);
-        false
+        self.state.mode == Mode::ConfirmClose
     }
 
     pub(crate) fn move_tab_via_api(
@@ -583,11 +596,36 @@ impl App {
         let Some((ws_idx, pane_id)) = self.focused_pane_target() else {
             return false;
         };
+        // Closing the last pane closes the workspace, so ask the workspace
+        // question rather than letting it go silently.
+        if self.state.close_pane_would_close_workspace(ws_idx, pane_id)
+            && self.state.should_confirm_workspace_close(ws_idx)
+        {
+            self.state.selected = ws_idx;
+            self.state.confirm_close_target = crate::app::state::ConfirmCloseTarget::Workspace;
+            self.state.mode = Mode::ConfirmClose;
+            return true;
+        }
         let Some(pane_id) = self.public_pane_id(ws_idx, pane_id) else {
             return false;
         };
         self.runtime_pane_close("tui.pane.close", pane_id);
         self.state.mode == Mode::ConfirmClose
+    }
+
+    pub(crate) fn toggle_focused_pane_pin_via_api(&mut self) {
+        let Some((ws_idx, pane_id)) = self.focused_pane_target() else {
+            return;
+        };
+        let pinned = self
+            .state
+            .workspaces
+            .get(ws_idx)
+            .is_some_and(|ws| ws.pane_is_pinned(pane_id));
+        let Some(public_pane_id) = self.public_pane_id(ws_idx, pane_id) else {
+            return;
+        };
+        self.runtime_pane_set_pinned("tui.pane.set_pinned", public_pane_id, !pinned);
     }
 
     pub(crate) fn zoom_focused_pane_via_api(&mut self) {
@@ -1381,6 +1419,7 @@ pub(crate) enum NavigateAction {
     CyclePanePrevious,
     LastPane,
     LastPaneInTab,
+    TogglePinPane,
     LastTab,
     Help,
     Settings,
@@ -1519,6 +1558,7 @@ fn non_indexed_action_for_key(
         (&kb.swap_pane_right, NavigateAction::SwapPaneRight),
         (&kb.last_pane, NavigateAction::LastPane),
         (&kb.last_pane_in_tab, NavigateAction::LastPaneInTab),
+        (&kb.toggle_pin_pane, NavigateAction::TogglePinPane),
         (&kb.cycle_pane_next, NavigateAction::CyclePaneNext),
         (&kb.cycle_pane_previous, NavigateAction::CyclePanePrevious),
         (&kb.split_vertical, NavigateAction::SplitVertical),
@@ -1635,7 +1675,7 @@ pub(super) fn execute_navigate_action_in_context(
         NavigateAction::CloseWorkspace => {
             if let Some(ws_idx) = workspace_action_target(state, context) {
                 state.selected = ws_idx;
-                if state.confirm_close {
+                if state.should_confirm_workspace_close(ws_idx) {
                     super::modal::open_confirm_close(state);
                 } else {
                     state.close_selected_workspace();
@@ -1775,6 +1815,25 @@ pub(super) fn execute_navigate_action_in_context(
         }
         NavigateAction::LastPaneInTab => {
             state.last_pane_in_tab();
+            leave_navigate_mode(state);
+        }
+        NavigateAction::TogglePinPane => {
+            if let Some(ws_idx) = state.active {
+                if let Some(pane_id) = state
+                    .workspaces
+                    .get(ws_idx)
+                    .and_then(|ws| ws.focused_pane_id())
+                {
+                    let pinned = state
+                        .workspaces
+                        .get(ws_idx)
+                        .is_some_and(|ws| ws.pane_is_pinned(pane_id));
+                    if let Some(ws) = state.workspaces.get_mut(ws_idx) {
+                        ws.set_pane_pinned(pane_id, !pinned);
+                        state.mark_session_dirty();
+                    }
+                }
+            }
             leave_navigate_mode(state);
         }
         NavigateAction::LastTab => {
@@ -3241,6 +3300,126 @@ navigate_pane_down = "ctrl+j"
         assert_eq!(state.workspaces.len(), 1);
         assert_eq!(state.workspaces[0].display_name(), "main");
         assert_eq!(state.mode, Mode::Terminal);
+    }
+
+    #[tokio::test]
+    async fn closing_a_tab_with_a_pinned_pane_raises_the_dialog_instead_of_doing_nothing() {
+        let mut app = app_with_test_workspaces(&["main"]);
+        app.state.active = Some(0);
+        app.state.selected = 0;
+        app.state.mode = Mode::Navigate;
+        app.state.workspaces[0].test_add_tab(Some("second"));
+        app.state.ensure_test_terminals();
+        // Pin a pane in the tab we are about to close.
+        let tab_idx = app.state.workspaces[0].active_tab_index();
+        let pane_id = app.state.workspaces[0].tabs[tab_idx].root_pane;
+        app.state.workspaces[0].set_pane_pinned(pane_id, true);
+
+        let requires_confirmation = app.close_active_tab_via_api_requires_confirmation();
+
+        assert!(
+            requires_confirmation,
+            "the caller clears the mode when this reports false, making the close a no-op"
+        );
+        assert_eq!(app.state.mode, Mode::ConfirmClose);
+        assert_eq!(app.state.workspaces[0].tabs.len(), 2, "nothing closed yet");
+    }
+
+    #[tokio::test]
+    async fn closing_the_last_tab_asks_the_workspace_question() {
+        let mut app = app_with_test_workspaces(&["main"]);
+        app.state.active = Some(0);
+        app.state.selected = 0;
+        app.state.mode = Mode::Navigate;
+        app.state.ensure_test_terminals();
+        let pane_id = app.state.workspaces[0].tabs[0].root_pane;
+        app.state.workspaces[0].set_pane_pinned(pane_id, true);
+        assert_eq!(app.state.workspaces[0].tabs.len(), 1, "single tab");
+
+        let requires_confirmation = app.close_active_tab_via_api_requires_confirmation();
+
+        assert!(
+            requires_confirmation,
+            "closing the last tab closes the workspace, so it must ask"
+        );
+        assert_eq!(app.state.mode, Mode::ConfirmClose);
+        assert_eq!(
+            app.state.confirm_close_target,
+            crate::app::state::ConfirmCloseTarget::Workspace,
+            "it is the workspace that is about to go"
+        );
+        assert_eq!(app.state.workspaces.len(), 1, "nothing closed yet");
+    }
+
+    #[tokio::test]
+    async fn closing_the_last_tab_still_closes_outright_when_nothing_asks() {
+        let mut app = app_with_test_workspaces(&["main"]);
+        app.state.active = Some(0);
+        app.state.selected = 0;
+        app.state.mode = Mode::Navigate;
+        app.state.confirm_close = false;
+        app.state.ensure_test_terminals();
+
+        let requires_confirmation = app.close_active_tab_via_api_requires_confirmation();
+
+        assert!(!requires_confirmation);
+        assert!(app.state.workspaces.is_empty(), "workspace closed outright");
+    }
+
+    #[tokio::test]
+    async fn closing_the_last_pane_asks_the_workspace_question() {
+        let mut app = app_with_test_workspaces(&["main"]);
+        app.state.active = Some(0);
+        app.state.selected = 0;
+        app.state.mode = Mode::Navigate;
+        app.state.ensure_test_terminals();
+
+        let requires_confirmation = app.close_focused_pane_via_api_requires_confirmation();
+
+        assert!(
+            requires_confirmation,
+            "closing the last pane closes the workspace, so it must ask"
+        );
+        assert_eq!(app.state.mode, Mode::ConfirmClose);
+        assert_eq!(app.state.workspaces.len(), 1, "nothing closed yet");
+    }
+
+    #[tokio::test]
+    async fn closing_a_tab_without_pinned_panes_needs_no_confirmation() {
+        let mut app = app_with_test_workspaces(&["main"]);
+        app.state.active = Some(0);
+        app.state.selected = 0;
+        app.state.mode = Mode::Navigate;
+        app.state.workspaces[0].test_add_tab(Some("second"));
+        app.state.ensure_test_terminals();
+
+        let requires_confirmation = app.close_active_tab_via_api_requires_confirmation();
+
+        assert!(!requires_confirmation);
+        assert_eq!(app.state.workspaces[0].tabs.len(), 1, "tab closed outright");
+    }
+
+    #[tokio::test]
+    async fn toggle_pin_pane_action_flips_the_focused_pane_through_the_api() {
+        let mut app = app_with_test_workspaces(&["main"]);
+        app.state.active = Some(0);
+        app.state.selected = 0;
+        app.state.mode = Mode::Navigate;
+        let pane_id = app.state.workspaces[0].focused_pane_id().unwrap();
+        assert!(!app.state.workspaces[0].pane_is_pinned(pane_id));
+
+        app.execute_tui_navigate_action(NavigateAction::TogglePinPane, ActionContext::Navigate);
+        assert!(
+            app.state.workspaces[0].pane_is_pinned(pane_id),
+            "the action must pin through the runtime path the TUI uses"
+        );
+
+        app.state.mode = Mode::Navigate;
+        app.execute_tui_navigate_action(NavigateAction::TogglePinPane, ActionContext::Navigate);
+        assert!(
+            !app.state.workspaces[0].pane_is_pinned(pane_id),
+            "and unpin"
+        );
     }
 
     #[test]

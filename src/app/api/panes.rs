@@ -125,7 +125,12 @@ impl App {
 
     pub(super) fn handle_pane_list(&mut self, id: String, params: PaneListParams) -> String {
         match self.collect_panes_for_workspace(params.workspace_id.as_deref()) {
-            Ok(panes) => encode_success(id, ResponseResult::PaneList { panes }),
+            Ok(mut panes) => {
+                if let Some(pinned) = params.pinned {
+                    panes.retain(|pane| pane.pinned == pinned);
+                }
+                encode_success(id, ResponseResult::PaneList { panes })
+            }
             Err((code, message)) => encode_error(id, &code, message),
         }
     }
@@ -1527,15 +1532,47 @@ impl App {
         encode_success(id, ResponseResult::Ok {})
     }
 
-    pub(super) fn handle_pane_close(&mut self, id: String, target: PaneTarget) -> String {
-        match self.close_pane(id.clone(), &target) {
+    pub(super) fn handle_pane_close(
+        &mut self,
+        id: String,
+        params: crate::api::schema::PaneCloseParams,
+    ) -> String {
+        let force = params.force;
+        let target = PaneTarget {
+            pane_id: params.pane_id,
+        };
+        match self.close_pane(id.clone(), &target, force) {
             Ok(()) => encode_success(id, ResponseResult::Ok {}),
             Err(response) => response,
         }
     }
 
+    pub(super) fn handle_pane_set_pinned(
+        &mut self,
+        id: String,
+        params: crate::api::schema::PaneSetPinnedParams,
+    ) -> String {
+        let Some((ws_idx, pane_id)) = self.parse_pane_id(&params.pane_id) else {
+            return pane_not_found(id, &params.pane_id);
+        };
+        let Some(ws) = self.state.workspaces.get_mut(ws_idx) else {
+            return pane_not_found(id, &params.pane_id);
+        };
+        if ws.set_pane_pinned(pane_id, params.pinned).is_none() {
+            return pane_not_found(id, &params.pane_id);
+        }
+        self.state.mark_session_dirty();
+        self.emit_pane_updated(ws_idx, pane_id);
+        encode_success(id, ResponseResult::Ok {})
+    }
+
     /// Close a pane; `Err` carries the encoded error response.
-    pub(super) fn close_pane(&mut self, id: String, target: &PaneTarget) -> Result<(), String> {
+    pub(super) fn close_pane(
+        &mut self,
+        id: String,
+        target: &PaneTarget,
+        force: bool,
+    ) -> Result<(), String> {
         let Some((ws_idx, pane_id)) = self.parse_pane_id(&target.pane_id) else {
             return Err(pane_not_found(id, &target.pane_id));
         };
@@ -1544,6 +1581,25 @@ impl App {
         };
         let workspace_id = self.public_workspace_id(ws_idx);
         let layout_update_target = self.layout_update_target_after_pane_removal(ws_idx, pane_id);
+        if !force
+            && self
+                .state
+                .workspaces
+                .get(ws_idx)
+                .is_some_and(|ws| ws.pane_is_pinned(pane_id))
+        {
+            // Same shape as the worktree-group guard below: set the mode so an
+            // interactive client raises its dialog, and return an error so a
+            // script sees the refusal instead of silently destroying the pane.
+            self.state.selected = ws_idx;
+            self.state.confirm_close_target = crate::app::state::ConfirmCloseTarget::Pane(pane_id);
+            self.state.mode = crate::app::state::Mode::ConfirmClose;
+            return Err(encode_error(
+                id,
+                "confirmation_required",
+                "pane is pinned; pass force to close it",
+            ));
+        }
         if self.state.close_pane_would_close_workspace(ws_idx, pane_id)
             && self.state.confirm_implicit_worktree_group_close(ws_idx)
         {
@@ -2235,8 +2291,9 @@ mod tests {
 
         let response = app.handle_pane_close(
             "req".into(),
-            PaneTarget {
+            crate::api::schema::PaneCloseParams {
                 pane_id: public_pane_id,
+                force: false,
             },
         );
 
@@ -4050,5 +4107,114 @@ mod tests {
 
             assert_eq!(metadata_error_code(&response), "invalid_metadata_ttl");
         }
+    }
+    #[test]
+    fn api_close_refuses_a_pinned_pane_until_forced() {
+        let (mut app, public_pane_id) = app_with_test_workspace();
+        let pane_id = app.state.workspaces[0].tabs[0].root_pane;
+        app.state.workspaces[0].set_pane_pinned(pane_id, true);
+
+        let response = app.handle_pane_close(
+            "req".into(),
+            crate::api::schema::PaneCloseParams {
+                pane_id: public_pane_id.clone(),
+                force: false,
+            },
+        );
+        assert!(response.contains("confirmation_required"), "{response}");
+        assert_eq!(
+            app.state.mode,
+            crate::app::state::Mode::ConfirmClose,
+            "the interactive client raises its dialog off this mode"
+        );
+        assert!(
+            app.state.workspaces[0].pane_state(pane_id).is_some(),
+            "pane must survive the refused close"
+        );
+
+        let response = app.handle_pane_close(
+            "req".into(),
+            crate::api::schema::PaneCloseParams {
+                pane_id: public_pane_id,
+                force: true,
+            },
+        );
+        assert!(!response.contains("confirmation_required"), "{response}");
+    }
+
+    #[test]
+    fn api_close_takes_an_unpinned_pane_without_asking() {
+        let (mut app, public_pane_id) = app_with_test_workspace();
+
+        let response = app.handle_pane_close(
+            "req".into(),
+            crate::api::schema::PaneCloseParams {
+                pane_id: public_pane_id,
+                force: false,
+            },
+        );
+
+        assert!(!response.contains("confirmation_required"), "{response}");
+        assert_ne!(
+            app.state.mode,
+            crate::app::state::Mode::ConfirmClose,
+            "an unpinned pane must not raise a dialog"
+        );
+    }
+
+    #[test]
+    fn api_pane_list_filters_by_pinned_state() {
+        let (mut app, _) = app_with_test_workspace();
+        let first = app.state.workspaces[0].tabs[0].root_pane;
+        let second = app.state.workspaces[0].test_split(ratatui::layout::Direction::Horizontal);
+        app.state.ensure_test_terminals();
+        app.state.workspaces[0].set_pane_pinned(second, true);
+
+        let all = app.handle_pane_list("req".into(), PaneListParams::default());
+        assert_eq!(all.matches("\"pane_id\"").count(), 2, "{all}");
+
+        let pinned = app.handle_pane_list(
+            "req".into(),
+            PaneListParams {
+                workspace_id: None,
+                pinned: Some(true),
+            },
+        );
+        assert_eq!(pinned.matches("\"pane_id\"").count(), 1, "{pinned}");
+        assert!(pinned.contains("\"pinned\":true"), "{pinned}");
+
+        let unpinned = app.handle_pane_list(
+            "req".into(),
+            PaneListParams {
+                workspace_id: None,
+                pinned: Some(false),
+            },
+        );
+        assert_eq!(unpinned.matches("\"pane_id\"").count(), 1, "{unpinned}");
+        let _ = first;
+    }
+
+    #[test]
+    fn api_set_pinned_round_trips() {
+        let (mut app, public_pane_id) = app_with_test_workspace();
+        let pane_id = app.state.workspaces[0].tabs[0].root_pane;
+
+        app.handle_pane_set_pinned(
+            "req".into(),
+            crate::api::schema::PaneSetPinnedParams {
+                pane_id: public_pane_id.clone(),
+                pinned: true,
+            },
+        );
+        assert!(app.state.workspaces[0].pane_is_pinned(pane_id));
+
+        app.handle_pane_set_pinned(
+            "req".into(),
+            crate::api::schema::PaneSetPinnedParams {
+                pane_id: public_pane_id,
+                pinned: false,
+            },
+        );
+        assert!(!app.state.workspaces[0].pane_is_pinned(pane_id));
     }
 }

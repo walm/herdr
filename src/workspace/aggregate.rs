@@ -27,6 +27,12 @@ pub struct PaneDetail {
 }
 
 impl Tab {
+    /// Whether any pane in this tab is pinned. Closing the tab closes them all,
+    /// so a single pinned pane makes the whole tab ask for confirmation.
+    pub fn has_pinned_pane(&self) -> bool {
+        self.panes.values().any(|pane| pane.pinned)
+    }
+
     pub fn has_working_pane(&self, terminals: &HashMap<TerminalId, TerminalState>) -> bool {
         self.panes.values().any(|pane| {
             terminals

@@ -1113,7 +1113,10 @@ impl App {
             Method::PaneSendInput(params) => {
                 return self.handle_pane_send_input(request.id, params)
             }
-            Method::PaneClose(target) => return self.handle_pane_close(request.id, target),
+            Method::PaneClose(params) => return self.handle_pane_close(request.id, params),
+            Method::PaneSetPinned(params) => {
+                return self.handle_pane_set_pinned(request.id, params)
+            }
             Method::PopupClose(_) => {
                 return if self.close_popup_pane() {
                     responses::encode_success(request.id, ResponseResult::Ok {})

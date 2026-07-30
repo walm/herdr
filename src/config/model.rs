@@ -433,6 +433,7 @@ pub struct KeysConfig {
     pub last_pane: BindingConfig,
     /// Focus the last focused pane within the current tab. Unset by default.
     pub last_pane_in_tab: BindingConfig,
+    pub toggle_pin_pane: BindingConfig,
     /// Split pane vertically (side by side). Default: "prefix+v"
     pub split_vertical: BindingConfig,
     /// Split pane horizontally (stacked). Default: "prefix+minus"
@@ -556,6 +557,7 @@ pub(crate) struct KeysConfigOverlay {
     last_pane: Option<BindingConfig>,
     #[serde(skip_serializing_if = "Option::is_none")]
     last_pane_in_tab: Option<BindingConfig>,
+    toggle_pin_pane: Option<BindingConfig>,
     #[serde(skip_serializing_if = "Option::is_none")]
     split_vertical: Option<BindingConfig>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -640,6 +642,7 @@ impl<'de> Deserialize<'de> for KeysConfig {
         apply_field!(cycle_pane_previous);
         apply_field!(last_pane);
         apply_field!(last_pane_in_tab);
+        apply_field!(toggle_pin_pane);
         apply_field!(split_vertical);
         apply_field!(split_horizontal);
         apply_field!(close_pane);
@@ -740,6 +743,7 @@ impl KeysConfig {
         copy_effective_action_field!(cycle_pane_previous, keybinds.cycle_pane_previous);
         copy_effective_action_field!(last_pane, keybinds.last_pane);
         copy_effective_action_field!(last_pane_in_tab, keybinds.last_pane_in_tab);
+        copy_effective_action_field!(toggle_pin_pane, keybinds.toggle_pin_pane);
         copy_effective_action_field!(split_vertical, keybinds.split_vertical);
         copy_effective_action_field!(split_horizontal, keybinds.split_horizontal);
         copy_effective_action_field!(close_pane, keybinds.close_pane);
@@ -1027,6 +1031,7 @@ impl Default for KeysConfig {
             cycle_pane_previous: BindingConfig::one("prefix+shift+tab"),
             last_pane: BindingConfig::empty(),
             last_pane_in_tab: BindingConfig::empty(),
+            toggle_pin_pane: BindingConfig::empty(),
             split_vertical: BindingConfig::one("prefix+v"),
             split_horizontal: BindingConfig::one("prefix+minus"),
             close_pane: BindingConfig::one("prefix+x"),

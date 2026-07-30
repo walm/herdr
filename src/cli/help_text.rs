@@ -87,6 +87,12 @@ const SPECIFIC: &[(&str, &str, &str)] = &[
     ),
     // pane
     ("pane list", "workspace", "Limit to this workspace"),
+    ("pane list", "pinned", "Only list pinned panes"),
+    (
+        "pane list",
+        "unpinned",
+        "Only list panes that are not pinned",
+    ),
     ("pane resize", "amount", "Fraction to resize by, e.g. 0.05"),
     (
         "pane zoom",
@@ -113,6 +119,9 @@ const SPECIFIC: &[(&str, &str, &str)] = &[
     ("pane move", "label", "Name for the moved pane"),
     ("pane move", "tab-label", "Name for a newly created tab"),
     ("pane run", "command", "Command text, sent with Enter"),
+    ("pane close", "force", "Close even when the pane is pinned"),
+    ("pane pin", "pane_id", "Pane to pin"),
+    ("pane unpin", "pane_id", "Pane to unpin"),
     ("pane send-keys", "key", "Key names, e.g. ctrl+c enter"),
     ("pane report-agent", "state", "Lifecycle state to report"),
     (
@@ -201,6 +210,11 @@ const SPECIFIC: &[(&str, &str, &str)] = &[
     ("worktree list", "cwd", "Repository to inspect"),
     ("tab list", "workspace", "Limit to this workspace"),
     ("tab rename", "label", "New tab name"),
+    (
+        "tab close",
+        "force",
+        "Close even when the tab holds a pinned pane",
+    ),
     // misc leaf commands
     ("channel set", "channel", "Update channel to follow"),
     (
@@ -293,6 +307,13 @@ const EXAMPLES: &[(&str, &str)] = &[
          herdr pane report-metadata \"$HERDR_PANE_ID\" --source build --clear-marker\n\n  \
          # self-expiring marker\n  \
          herdr pane report-metadata \"$HERDR_PANE_ID\" --source build --marker \"!\" --ttl-ms 30000",
+    ),
+    (
+        "pane pin",
+        "  # ask before closing this pane, and its tab\n  \
+         herdr pane pin \"$HERDR_PANE_ID\"\n  \
+         herdr pane unpin \"$HERDR_PANE_ID\"\n  \
+         herdr pane close \"$HERDR_PANE_ID\" --force",
     ),
     (
         "pane report-agent",

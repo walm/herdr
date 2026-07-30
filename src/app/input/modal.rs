@@ -733,11 +733,15 @@ pub(crate) fn handle_resize_key(state: &mut AppState, raw_key: TerminalKey) {
 }
 
 pub(super) fn open_confirm_close(state: &mut AppState) {
+    state.confirm_close_target = crate::app::state::ConfirmCloseTarget::Workspace;
     state.mode = Mode::ConfirmClose;
 }
 
 #[cfg(test)]
 pub(super) fn confirm_close_accept(state: &mut AppState) {
+    // The state-only mirror closes the workspace; pane and tab targets are
+    // driven through the API path, which is what the TUI actually uses.
+    state.confirm_close_target = crate::app::state::ConfirmCloseTarget::default();
     state.close_selected_workspace();
     if state.workspaces.is_empty() {
         state.mode = Mode::Navigate;
@@ -747,6 +751,7 @@ pub(super) fn confirm_close_accept(state: &mut AppState) {
 }
 
 pub(super) fn confirm_close_cancel(state: &mut AppState) {
+    state.confirm_close_target = crate::app::state::ConfirmCloseTarget::default();
     state.mode = Mode::Navigate;
 }
 
@@ -768,6 +773,21 @@ fn open_workspace_color_menu(state: &mut AppState, ws_idx: usize, x: u16, y: u16
         list: MenuListState::new(0),
     });
     state.mode = Mode::ContextMenu;
+}
+
+/// Pin or unpin a pane and close the menu. Pinned panes ask before closing.
+fn apply_pane_pinned(
+    state: &mut AppState,
+    ws_idx: usize,
+    pane_id: crate::layout::PaneId,
+    pinned: bool,
+) {
+    if let Some(ws) = state.workspaces.get_mut(ws_idx) {
+        if ws.set_pane_pinned(pane_id, pinned).is_some() {
+            state.mark_session_dirty();
+        }
+    }
+    leave_modal(state);
 }
 
 /// Apply a chosen color (or "none" → clear) to a workspace and close the menu.
@@ -848,7 +868,7 @@ pub(super) fn apply_context_menu_action(
             Some("Close" | "Close group"),
         ) => {
             state.selected = ws_idx;
-            if state.confirm_close {
+            if state.should_confirm_workspace_close(ws_idx) {
                 open_confirm_close(state);
             } else {
                 state.close_selected_workspace();
@@ -881,6 +901,14 @@ pub(super) fn apply_context_menu_action(
         }
         (ContextMenuKind::Pane { pane_id, .. }, Some("Rename pane")) => {
             open_rename_pane(state, pane_id);
+        }
+        (
+            ContextMenuKind::Pane {
+                ws_idx, pane_id, ..
+            },
+            Some(item @ ("Pin pane" | "Unpin pane")),
+        ) => {
+            apply_pane_pinned(state, ws_idx, pane_id, item == "Pin pane");
         }
         (
             ContextMenuKind::Pane {
@@ -1150,9 +1178,25 @@ impl App {
 
     pub(super) fn confirm_close_accept_via_api(&mut self) {
         let ws_idx = self.state.selected;
-        if ws_idx < self.state.workspaces.len() {
-            self.close_workspace_idx_via_api(ws_idx);
+        match self.state.confirm_close_target {
+            crate::app::state::ConfirmCloseTarget::Pane(pane_id) => {
+                if let Some(public_pane_id) = self.public_pane_id(ws_idx, pane_id) {
+                    // Force: the user just answered the question the pin asked.
+                    self.runtime_pane_close_forced("tui.pane.close", public_pane_id, true);
+                }
+            }
+            crate::app::state::ConfirmCloseTarget::Tab(tab_idx) => {
+                if let Some(tab_id) = self.public_tab_id(ws_idx, tab_idx) {
+                    self.runtime_tab_close_forced("tui.tab.close", tab_id, true);
+                }
+            }
+            crate::app::state::ConfirmCloseTarget::Workspace => {
+                if ws_idx < self.state.workspaces.len() {
+                    self.close_workspace_idx_via_api(ws_idx);
+                }
+            }
         }
+        self.state.confirm_close_target = crate::app::state::ConfirmCloseTarget::default();
         self.state.mode = if self.state.active.is_some() {
             Mode::Terminal
         } else {
@@ -1289,7 +1333,7 @@ impl App {
                 Some("Close" | "Close group"),
             ) => {
                 self.state.selected = ws_idx;
-                if self.state.confirm_close {
+                if self.state.should_confirm_workspace_close(ws_idx) {
                     open_confirm_close(&mut self.state);
                 } else {
                     self.close_workspace_idx_via_api(ws_idx);
@@ -1315,6 +1359,14 @@ impl App {
             }
             (ContextMenuKind::Pane { pane_id, .. }, Some("Rename pane")) => {
                 open_rename_pane(&mut self.state, pane_id);
+            }
+            (
+                ContextMenuKind::Pane {
+                    ws_idx, pane_id, ..
+                },
+                Some(item @ ("Pin pane" | "Unpin pane")),
+            ) => {
+                apply_pane_pinned(&mut self.state, ws_idx, pane_id, item == "Pin pane");
             }
             (
                 ContextMenuKind::Pane {
@@ -2298,6 +2350,7 @@ mod tests {
                 pane_id,
                 source_pane_id: None,
                 has_manual_label: false,
+                pinned: false,
             },
             x: 0,
             y: 0,
@@ -2363,6 +2416,7 @@ mod tests {
                 pane_id,
                 source_pane_id: None,
                 has_manual_label: false,
+                pinned: false,
             },
             x: 0,
             y: 0,
@@ -2382,5 +2436,81 @@ mod tests {
         assert_eq!(app.state.mode, Mode::ConfirmClose);
         assert_eq!(app.state.workspaces.len(), 2);
         assert!(app.state.context_menu.is_none());
+    }
+    #[tokio::test]
+    async fn confirming_a_pinned_pane_close_closes_the_pane_not_the_workspace() {
+        let mut app = app_with_test_workspaces(&["main"]);
+        app.state.active = Some(0);
+        app.state.selected = 0;
+        // Two panes, so closing one must not take the workspace with it.
+        let second = app.state.workspaces[0].test_split(ratatui::layout::Direction::Horizontal);
+        app.state.ensure_test_terminals();
+        app.state.workspaces[0].set_pane_pinned(second, true);
+        let public_pane_id = app.public_pane_id(0, second).unwrap();
+
+        let response = app.handle_api_request(crate::api::schema::Request {
+            id: "req".into(),
+            method: crate::api::schema::Method::PaneClose(crate::api::schema::PaneCloseParams {
+                pane_id: public_pane_id,
+                force: false,
+            }),
+        });
+        assert!(response.contains("confirmation_required"), "{response}");
+        assert_eq!(app.state.mode, Mode::ConfirmClose);
+        assert_eq!(
+            app.state.confirm_close_target,
+            crate::app::state::ConfirmCloseTarget::Pane(second)
+        );
+
+        app.confirm_close_accept_via_api();
+
+        assert_eq!(
+            app.state.workspaces.len(),
+            1,
+            "accepting must not close the workspace"
+        );
+        assert!(
+            app.state.workspaces[0].pane_state(second).is_none(),
+            "the pinned pane should be gone"
+        );
+        assert_eq!(
+            app.state.confirm_close_target,
+            crate::app::state::ConfirmCloseTarget::Workspace,
+            "target resets so a later workspace close is not mistaken for a pane"
+        );
+    }
+
+    #[tokio::test]
+    async fn confirming_a_pinned_tab_close_closes_only_that_tab() {
+        let mut app = app_with_test_workspaces(&["main"]);
+        app.state.active = Some(0);
+        app.state.selected = 0;
+        app.state.workspaces[0].test_add_tab(Some("second"));
+        app.state.ensure_test_terminals();
+        let pane_id = app.state.workspaces[0].tabs[0].root_pane;
+        app.state.workspaces[0].set_pane_pinned(pane_id, true);
+        let tab_id = app.public_tab_id(0, 0).unwrap();
+
+        let response = app.handle_api_request(crate::api::schema::Request {
+            id: "req".into(),
+            method: crate::api::schema::Method::TabClose(crate::api::schema::TabCloseParams {
+                tab_id,
+                force: false,
+            }),
+        });
+        assert!(response.contains("confirmation_required"), "{response}");
+
+        app.confirm_close_accept_via_api();
+
+        assert_eq!(
+            app.state.workspaces.len(),
+            1,
+            "accepting must not close the workspace"
+        );
+        assert_eq!(
+            app.state.workspaces[0].tabs.len(),
+            1,
+            "only the pinned tab should close"
+        );
     }
 }

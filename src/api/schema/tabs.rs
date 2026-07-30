@@ -46,3 +46,11 @@ pub struct TabInfo {
     pub pane_count: usize,
     pub agent_status: AgentStatus,
 }
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
+pub struct TabCloseParams {
+    pub tab_id: String,
+    /// Close even when the tab holds a pinned pane.
+    #[serde(default)]
+    pub force: bool,
+}

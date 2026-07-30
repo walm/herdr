@@ -163,15 +163,21 @@ fn tab_rename(args: &[String]) -> std::io::Result<i32> {
 
 fn tab_close(args: &[String]) -> std::io::Result<i32> {
     let Some(raw_tab_id) = args.first() else {
-        eprintln!("usage: herdr tab close <tab_id>");
+        eprintln!("usage: herdr tab close <tab_id> [--force]");
         return Ok(2);
     };
-    if args.len() != 1 {
-        eprintln!("usage: herdr tab close <tab_id>");
-        return Ok(2);
+    let mut force = false;
+    for arg in &args[1..] {
+        match arg.as_str() {
+            "--force" => force = true,
+            other => {
+                eprintln!("unknown option: {other}");
+                return Ok(2);
+            }
+        }
     }
 
-    super::runtime::tab_close(super::normalize_tab_id(raw_tab_id))
+    super::runtime::tab_close(super::normalize_tab_id(raw_tab_id), force)
 }
 
 fn print_tab_help() {

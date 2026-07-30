@@ -31,6 +31,8 @@ pub(super) fn run_pane_command(args: &[String]) -> std::io::Result<i32> {
         "swap" => pane_swap(&args[1..]),
         "move" => pane_move(&args[1..]),
         "close" => pane_close(&args[1..]),
+        "pin" => pane_set_pinned(&args[1..], true),
+        "unpin" => pane_set_pinned(&args[1..], false),
         "send-text" => pane_send_text(&args[1..]),
         "send-keys" => pane_send_keys(&args[1..]),
         "wait-output" => pane_wait_output(&args[1..]),
@@ -52,10 +54,19 @@ pub(super) fn run_pane_command(args: &[String]) -> std::io::Result<i32> {
 
 fn pane_list(args: &[String]) -> std::io::Result<i32> {
     let mut workspace_id = None;
+    let mut pinned = None;
 
     let mut index = 0;
     while index < args.len() {
         match args[index].as_str() {
+            "--pinned" => {
+                pinned = Some(true);
+                index += 1;
+            }
+            "--unpinned" => {
+                pinned = Some(false);
+                index += 1;
+            }
             "--workspace" => {
                 let Some(value) = args.get(index + 1) else {
                     eprintln!("missing value for --workspace");
@@ -73,7 +84,10 @@ fn pane_list(args: &[String]) -> std::io::Result<i32> {
 
     super::print_response(&super::send_request(&Request {
         id: "cli:pane:list".into(),
-        method: Method::PaneList(PaneListParams { workspace_id }),
+        method: Method::PaneList(PaneListParams {
+            workspace_id,
+            pinned,
+        }),
     })?)
 }
 
@@ -886,15 +900,40 @@ fn parse_pane_direction(value: &str) -> Result<PaneDirection, String> {
 
 fn pane_close(args: &[String]) -> std::io::Result<i32> {
     let Some(raw_pane_id) = args.first() else {
-        eprintln!("usage: herdr pane close <pane_id>");
+        eprintln!("usage: herdr pane close <pane_id> [--force]");
+        return Ok(2);
+    };
+    let mut force = false;
+    for arg in &args[1..] {
+        match arg.as_str() {
+            "--force" => force = true,
+            other => {
+                eprintln!("unknown option: {other}");
+                return Ok(2);
+            }
+        }
+    }
+
+    super::runtime::pane_close(super::normalize_pane_id(raw_pane_id), force)
+}
+
+fn pane_set_pinned(args: &[String], pinned: bool) -> std::io::Result<i32> {
+    let verb = if pinned { "pin" } else { "unpin" };
+    let Some(raw_pane_id) = args.first() else {
+        eprintln!("usage: herdr pane {verb} <pane_id>");
         return Ok(2);
     };
     if args.len() != 1 {
-        eprintln!("usage: herdr pane close <pane_id>");
+        eprintln!("usage: herdr pane {verb} <pane_id>");
         return Ok(2);
     }
 
-    super::runtime::pane_close(super::normalize_pane_id(raw_pane_id))
+    super::send_ok_request(Method::PaneSetPinned(
+        crate::api::schema::PaneSetPinnedParams {
+            pane_id: super::normalize_pane_id(raw_pane_id),
+            pinned,
+        },
+    ))
 }
 
 fn pane_send_text(args: &[String]) -> std::io::Result<i32> {

@@ -102,7 +102,7 @@ pub enum Method {
     #[serde(rename = "tab.move")]
     TabMove(TabMoveParams),
     #[serde(rename = "tab.close")]
-    TabClose(TabTarget),
+    TabClose(TabCloseParams),
     #[serde(rename = "agent.list")]
     AgentList(EmptyParams),
     #[serde(rename = "agent.get")]
@@ -200,7 +200,9 @@ pub enum Method {
     #[serde(rename = "pane.release_agent")]
     PaneReleaseAgent(PaneReleaseAgentParams),
     #[serde(rename = "pane.close")]
-    PaneClose(PaneTarget),
+    PaneClose(PaneCloseParams),
+    #[serde(rename = "pane.set_pinned")]
+    PaneSetPinned(PaneSetPinnedParams),
     #[serde(rename = "popup.close")]
     PopupClose(EmptyParams),
     #[serde(rename = "events.subscribe")]

@@ -481,6 +481,7 @@ fn render_pane_borders(
     }
 
     render_pane_border_titles(app, ws, pane_infos, frame);
+    render_pane_pin_indicators(app, ws, pane_infos, frame);
 }
 
 fn add_split_border_cells(
@@ -603,6 +604,48 @@ fn line_touches_pane(x: u16, y: u16, info: &PaneInfo, pane_gaps: bool) -> bool {
         || (in_rows && x == shared_right)
         || (in_cols && y == shared_bottom)
         || (x == shared_right && y == shared_bottom)
+}
+
+/// Marks pinned panes on their top border, opposite the label. Drawn separately
+/// from the title because a pane can be pinned without having a label, and an
+/// invisible pin would be a trap.
+fn render_pane_pin_indicators(
+    app: &AppState,
+    ws: &crate::workspace::Workspace,
+    pane_infos: &[PaneInfo],
+    frame: &mut Frame,
+) {
+    const PIN_GLYPH: &str = "\u{25c8}";
+
+    let buf = frame.buffer_mut();
+    let area = buf.area;
+    for info in pane_infos {
+        if !info.borders.contains(Borders::TOP) || info.rect.width <= 4 {
+            continue;
+        }
+        if !ws.pane_is_pinned(info.id) {
+            continue;
+        }
+        let y = info.rect.y;
+        if y < area.y || y >= area.y.saturating_add(area.height) {
+            continue;
+        }
+        // One cell in from the top-right corner, so it never overwrites the corner.
+        let x = info
+            .rect
+            .x
+            .saturating_add(info.rect.width)
+            .saturating_sub(2);
+        if x <= info.rect.x || x >= area.x.saturating_add(area.width) {
+            continue;
+        }
+        let color = if info.is_focused {
+            app.palette.accent
+        } else {
+            app.palette.overlay0
+        };
+        buf.set_stringn(x, y, PIN_GLYPH, 1, Style::default().fg(color));
+    }
 }
 
 fn render_pane_border_titles(

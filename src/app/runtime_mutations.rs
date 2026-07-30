@@ -94,7 +94,19 @@ impl App {
     }
 
     pub(crate) fn runtime_tab_close(&mut self, id: &'static str, tab_id: String) -> String {
-        self.dispatch_runtime_mutation(id, Method::TabClose(TabTarget { tab_id }))
+        self.runtime_tab_close_forced(id, tab_id, false)
+    }
+
+    pub(crate) fn runtime_tab_close_forced(
+        &mut self,
+        id: &'static str,
+        tab_id: String,
+        force: bool,
+    ) -> String {
+        self.dispatch_runtime_mutation(
+            id,
+            Method::TabClose(crate::api::schema::TabCloseParams { tab_id, force }),
+        )
     }
 
     pub(crate) fn runtime_server_reload_config(&mut self, id: &'static str) -> String {
@@ -105,8 +117,32 @@ impl App {
         self.dispatch_runtime_mutation(id, Method::PaneFocus(PaneTarget { pane_id }))
     }
 
+    pub(crate) fn runtime_pane_set_pinned(
+        &mut self,
+        id: &'static str,
+        pane_id: String,
+        pinned: bool,
+    ) -> String {
+        self.dispatch_runtime_mutation(
+            id,
+            Method::PaneSetPinned(crate::api::schema::PaneSetPinnedParams { pane_id, pinned }),
+        )
+    }
+
     pub(crate) fn runtime_pane_close(&mut self, id: &'static str, pane_id: String) -> String {
-        self.dispatch_runtime_mutation(id, Method::PaneClose(PaneTarget { pane_id }))
+        self.runtime_pane_close_forced(id, pane_id, false)
+    }
+
+    pub(crate) fn runtime_pane_close_forced(
+        &mut self,
+        id: &'static str,
+        pane_id: String,
+        force: bool,
+    ) -> String {
+        self.dispatch_runtime_mutation(
+            id,
+            Method::PaneClose(crate::api::schema::PaneCloseParams { pane_id, force }),
+        )
     }
 
     pub(crate) fn runtime_pane_rename(

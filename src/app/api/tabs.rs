@@ -238,7 +238,15 @@ impl App {
         encode_success(id, ResponseResult::TabList { tabs })
     }
 
-    pub(super) fn handle_tab_close(&mut self, id: String, target: TabTarget) -> String {
+    pub(super) fn handle_tab_close(
+        &mut self,
+        id: String,
+        params: crate::api::schema::TabCloseParams,
+    ) -> String {
+        let force = params.force;
+        let target = TabTarget {
+            tab_id: params.tab_id,
+        };
         let Some((ws_idx, tab_idx)) = self.parse_tab_id(&target.tab_id) else {
             return tab_not_found(id, &target.tab_id);
         };
@@ -250,12 +258,26 @@ impl App {
             return tab_not_found(id, &target.tab_id);
         };
         let closes_workspace = ws.tabs.len() <= 1;
+        let tab_has_pinned_pane = ws
+            .tabs
+            .get(tab_idx)
+            .is_some_and(crate::workspace::Tab::has_pinned_pane);
         let terminal_ids = self.state.terminal_ids_for_tab(ws_idx, tab_idx);
         let pane_ids = ws
             .tabs
             .get(tab_idx)
             .map(|tab| tab.layout.pane_ids())
             .unwrap_or_default();
+
+        if tab_has_pinned_pane && !force {
+            // Closing the tab closes every pane in it, so one pinned pane makes
+            // the whole tab ask. Mode drives the interactive dialog; the error
+            // is what a script sees.
+            self.state.selected = ws_idx;
+            self.state.confirm_close_target = crate::app::state::ConfirmCloseTarget::Tab(tab_idx);
+            self.state.mode = crate::app::state::Mode::ConfirmClose;
+            return encode_error(id, "confirmation_required", "tab contains a pinned pane");
+        }
 
         if closes_workspace {
             if self.state.confirm_implicit_worktree_group_close(ws_idx) {
@@ -348,6 +370,40 @@ mod tests {
     };
 
     #[test]
+    fn api_tab_close_refuses_when_the_tab_holds_a_pinned_pane() {
+        let (_api_tx, api_rx) = tokio::sync::mpsc::unbounded_channel();
+        let mut app = App::new(
+            &Config::default(),
+            true,
+            None,
+            api_rx,
+            crate::api::EventHub::default(),
+        );
+        app.state.workspaces = vec![Workspace::test_new("tabs")];
+        app.state.active = Some(0);
+        app.state.selected = 0;
+        let pane_id = app.state.workspaces[0].tabs[0].root_pane;
+        app.state.workspaces[0].set_pane_pinned(pane_id, true);
+        let tab_id = app.public_tab_id(0, 0).unwrap();
+
+        let response = app.handle_tab_close(
+            "req".into(),
+            crate::api::schema::TabCloseParams {
+                tab_id,
+                force: false,
+            },
+        );
+
+        assert!(response.contains("confirmation_required"), "{response}");
+        assert_eq!(app.state.mode, crate::app::state::Mode::ConfirmClose);
+        assert_eq!(
+            app.state.workspaces.len(),
+            1,
+            "the tab and its workspace must survive"
+        );
+    }
+
+    #[test]
     fn api_tab_close_last_tab_closes_workspace_and_emits_both_events() {
         let event_hub = crate::api::EventHub::default();
         let (_api_tx, api_rx) = tokio::sync::mpsc::unbounded_channel();
@@ -360,8 +416,9 @@ mod tests {
 
         let response = app.handle_tab_close(
             "req".into(),
-            TabTarget {
+            crate::api::schema::TabCloseParams {
                 tab_id: tab_id.clone(),
+                force: false,
             },
         );
 

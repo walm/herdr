@@ -208,6 +208,8 @@ const DEFAULT_CONFIG: &str = r##"# herdr configuration
 # split_vertical = "prefix+v"
 # split_horizontal = "prefix+minus"
 # close_pane = "prefix+x"
+# toggle_pin_pane = ""   # optional, unset by default; pinned panes ask before closing,
+#                        # and so does any tab or workspace holding one
 # zoom = "prefix+z"       # legacy alias: fullscreen
 # resize_mode = "prefix+r"
 # toggle_sidebar = "prefix+b"

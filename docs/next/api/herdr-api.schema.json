@@ -808,6 +808,10 @@
             "pane_id": {
               "type": "string"
             },
+            "pinned": {
+              "description": "Pinned panes refuse to close without `force`.",
+              "type": "boolean"
+            },
             "revision": {
               "format": "uint64",
               "minimum": 0,
@@ -2401,6 +2405,22 @@
           ],
           "type": "object"
         },
+        "PaneCloseParams": {
+          "properties": {
+            "force": {
+              "default": false,
+              "description": "Close even when the pane is pinned.",
+              "type": "boolean"
+            },
+            "pane_id": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "pane_id"
+          ],
+          "type": "object"
+        },
         "PaneCurrentParams": {
           "properties": {
             "caller_pane_id": {
@@ -2548,6 +2568,13 @@
         },
         "PaneListParams": {
           "properties": {
+            "pinned": {
+              "description": "Filter by pinned state. `None` lists every pane.",
+              "type": [
+                "boolean",
+                "null"
+              ]
+            },
             "workspace_id": {
               "type": [
                 "string",
@@ -3030,6 +3057,21 @@
           "required": [
             "pane_id",
             "text"
+          ],
+          "type": "object"
+        },
+        "PaneSetPinnedParams": {
+          "properties": {
+            "pane_id": {
+              "type": "string"
+            },
+            "pinned": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "pane_id",
+            "pinned"
           ],
           "type": "object"
         },
@@ -4014,6 +4056,22 @@
             }
           ]
         },
+        "TabCloseParams": {
+          "properties": {
+            "force": {
+              "default": false,
+              "description": "Close even when the tab holds a pinned pane.",
+              "type": "boolean"
+            },
+            "tab_id": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "tab_id"
+          ],
+          "type": "object"
+        },
         "TabCreateParams": {
           "properties": {
             "cwd": {
@@ -4863,7 +4921,7 @@
               "type": "string"
             },
             "params": {
-              "$ref": "#/schemas/request/$defs/TabTarget"
+              "$ref": "#/schemas/request/$defs/TabCloseParams"
             }
           },
           "required": [
@@ -5551,7 +5609,23 @@
               "type": "string"
             },
             "params": {
-              "$ref": "#/schemas/request/$defs/PaneTarget"
+              "$ref": "#/schemas/request/$defs/PaneCloseParams"
+            }
+          },
+          "required": [
+            "method",
+            "params"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "method": {
+              "const": "pane.set_pinned",
+              "type": "string"
+            },
+            "params": {
+              "$ref": "#/schemas/request/$defs/PaneSetPinnedParams"
             }
           },
           "required": [
@@ -7388,6 +7462,10 @@
             },
             "pane_id": {
               "type": "string"
+            },
+            "pinned": {
+              "description": "Pinned panes refuse to close without `force`.",
+              "type": "boolean"
             },
             "revision": {
               "format": "uint64",

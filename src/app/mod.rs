@@ -664,6 +664,7 @@ impl App {
             redraw_on_focus_gained: config.ui.redraw_on_focus_gained,
             mouse_scroll_lines: config.ui.mouse_scroll_lines(),
             confirm_close: config.ui.confirm_close,
+            confirm_close_target: crate::app::state::ConfirmCloseTarget::default(),
             prompt_new_tab_name: config.ui.prompt_new_tab_name,
             prompt_new_workspace_name: config.ui.prompt_new_workspace_name,
             pane_borders: config.ui.pane_borders,
@@ -4612,8 +4613,9 @@ mod tests {
 
         let response = app.handle_api_request(crate::api::schema::Request {
             id: "req_pane_close".into(),
-            method: crate::api::schema::Method::PaneClose(crate::api::schema::PaneTarget {
+            method: crate::api::schema::Method::PaneClose(crate::api::schema::PaneCloseParams {
                 pane_id: target_pane_id,
+                force: false,
             }),
         });
         let response: serde_json::Value = serde_json::from_str(&response).unwrap();
@@ -4638,8 +4640,9 @@ mod tests {
 
         let response = app.handle_api_request(crate::api::schema::Request {
             id: "req_pane_close_last".into(),
-            method: crate::api::schema::Method::PaneClose(crate::api::schema::PaneTarget {
+            method: crate::api::schema::Method::PaneClose(crate::api::schema::PaneCloseParams {
                 pane_id: target_pane_id,
+                force: false,
             }),
         });
         let response: serde_json::Value = serde_json::from_str(&response).unwrap();
@@ -4677,8 +4680,9 @@ mod tests {
 
         let response = app.handle_api_request(crate::api::schema::Request {
             id: "req_pane_close_parent_group".into(),
-            method: crate::api::schema::Method::PaneClose(crate::api::schema::PaneTarget {
+            method: crate::api::schema::Method::PaneClose(crate::api::schema::PaneCloseParams {
                 pane_id: target_pane_id,
+                force: false,
             }),
         });
         let response: serde_json::Value = serde_json::from_str(&response).unwrap();

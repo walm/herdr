@@ -109,6 +109,14 @@ pub struct PaneSnapshot {
     pub agent_session: Option<PaneAgentSessionSnapshot>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub launch_argv: Option<Vec<String>>,
+    /// Pinned panes ask before closing. Absent in older snapshots, which restore
+    /// as unpinned.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub pinned: bool,
+}
+
+fn is_false(value: &bool) -> bool {
+    !*value
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -372,6 +380,7 @@ fn capture_tab(
                 managed_agent_kind,
                 agent_session,
                 launch_argv,
+                pinned: tab.panes.get(id).is_some_and(|pane| pane.pinned),
             },
         );
     }
@@ -652,6 +661,7 @@ mod tests {
                 managed_agent_kind: None,
                 agent_session: None,
                 launch_argv: None,
+                pinned: false,
             },
         );
         panes.insert(
@@ -663,6 +673,7 @@ mod tests {
                 managed_agent_kind: None,
                 agent_session: None,
                 launch_argv: None,
+                pinned: false,
             },
         );
 
@@ -1212,6 +1223,7 @@ mod tests {
                 managed_agent_kind: None,
                 agent_session: None,
                 launch_argv: None,
+                pinned: false,
             },
         );
         panes.insert(
@@ -1225,6 +1237,7 @@ mod tests {
                 managed_agent_kind: None,
                 agent_session: None,
                 launch_argv: None,
+                pinned: false,
             },
         );
 
@@ -1269,5 +1282,34 @@ mod tests {
             restored.workspaces[0].tabs[0].panes[&0].cwd,
             PathBuf::from("/tmp/this-directory-does-not-exist-for-herdr-test")
         );
+    }
+    #[test]
+    fn pinned_survives_capture_and_older_snapshots_load_unpinned() {
+        // Absent field must default to unpinned, so old sessions stay closable.
+        let legacy = r#"{"cwd":"/tmp"}"#;
+        let restored: PaneSnapshot = serde_json::from_str(legacy).unwrap();
+        assert!(!restored.pinned);
+
+        let pinned = PaneSnapshot {
+            cwd: "/tmp".into(),
+            label: None,
+            agent_name: None,
+            managed_agent_kind: None,
+            agent_session: None,
+            launch_argv: None,
+            pinned: true,
+        };
+        let encoded = serde_json::to_string(&pinned).unwrap();
+        assert!(encoded.contains("\"pinned\":true"), "{encoded}");
+        let round_tripped: PaneSnapshot = serde_json::from_str(&encoded).unwrap();
+        assert!(round_tripped.pinned);
+
+        // Unpinned panes stay out of the file entirely.
+        let plain = PaneSnapshot {
+            pinned: false,
+            ..pinned
+        };
+        let encoded = serde_json::to_string(&plain).unwrap();
+        assert!(!encoded.contains("pinned"), "{encoded}");
     }
 }

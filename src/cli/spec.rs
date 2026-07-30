@@ -299,7 +299,12 @@ fn tab_command() -> Command {
                 .arg(required("tab_id", "TAB_ID"))
                 .arg(required("label", "LABEL").num_args(1..)),
         )
-        .subcommand(id_command("close", "tab_id", "Close a tab"))
+        .subcommand(
+            Command::new("close")
+                .about("Close a tab")
+                .arg(required("tab_id", "TAB_ID"))
+                .arg(flag("force")),
+        )
 }
 
 fn notification_command() -> Command {
@@ -467,7 +472,9 @@ fn pane_command() -> Command {
         .subcommand(
             Command::new("list")
                 .about("List panes")
-                .arg(option("workspace", "WORKSPACE_ID")),
+                .arg(option("workspace", "WORKSPACE_ID"))
+                .arg(flag("pinned"))
+                .arg(flag("unpinned")),
         )
         .subcommand(
             Command::new("current")
@@ -571,7 +578,22 @@ fn pane_command() -> Command {
                 .arg(flag("focus"))
                 .arg(flag("no-focus")),
         )
-        .subcommand(id_command("close", "pane_id", "Close a pane"))
+        .subcommand(
+            Command::new("close")
+                .about("Close a pane")
+                .arg(required("pane_id", "PANE_ID"))
+                .arg(flag("force")),
+        )
+        .subcommand(
+            Command::new("pin")
+                .about("Pin a pane so closing it asks first")
+                .arg(required("pane_id", "PANE_ID")),
+        )
+        .subcommand(
+            Command::new("unpin")
+                .about("Unpin a pane")
+                .arg(required("pane_id", "PANE_ID")),
+        )
         .subcommand(
             Command::new("send-text")
                 .about("Send literal text to a pane")

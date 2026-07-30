@@ -212,6 +212,9 @@ pub struct PaneResizeParams {
 pub struct PaneListParams {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub workspace_id: Option<String>,
+    /// Filter by pinned state. `None` lists every pane.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub pinned: Option<bool>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema, Default)]
@@ -403,6 +406,9 @@ pub struct PaneInfo {
     pub workspace_id: String,
     pub tab_id: String,
     pub focused: bool,
+    /// Pinned panes refuse to close without `force`.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub pinned: bool,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub cwd: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -634,4 +640,18 @@ pub struct PaneReadResult {
     pub text: String,
     pub revision: u64,
     pub truncated: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
+pub struct PaneSetPinnedParams {
+    pub pane_id: String,
+    pub pinned: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
+pub struct PaneCloseParams {
+    pub pane_id: String,
+    /// Close even when the pane is pinned.
+    #[serde(default)]
+    pub force: bool,
 }

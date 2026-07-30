@@ -493,6 +493,8 @@ impl App {
             &crate::api::schema::PaneTarget {
                 pane_id: pane_id.clone(),
             },
+            // Plugin panes are owned by the plugin lifecycle, not by user pins.
+            true,
         ) {
             return response;
         }
@@ -1995,6 +1997,7 @@ command = ["sh", "-c", "printf %s ${{HERDR_PANE_ID-unset}} > '{}'; sleep 1"]
             id: "pane-list-popup".into(),
             method: Method::PaneList(PaneListParams {
                 workspace_id: Some(app.public_workspace_id(0)),
+                pinned: None,
             }),
         });
         let ResponseResult::PaneList { panes } = response_result(&pane_list) else {

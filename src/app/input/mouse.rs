@@ -1115,6 +1115,10 @@ impl AppState {
                             pane_id: info.id,
                             source_pane_id,
                             has_manual_label,
+                            pinned: self
+                                .workspaces
+                                .get(ws_idx)
+                                .is_some_and(|ws| ws.pane_is_pinned(info.id)),
                         },
                         x: mouse.column,
                         y: mouse.row,
@@ -2958,6 +2962,7 @@ mod tests {
                 pane_id,
                 source_pane_id: None,
                 has_manual_label: false,
+                pinned: false,
             },
             x: 2,
             y: 2,
