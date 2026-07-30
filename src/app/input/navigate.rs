@@ -483,9 +483,16 @@ impl App {
             if self.state.confirm_implicit_worktree_group_close(ws_idx) {
                 return true;
             }
+            // Closing the last tab closes the workspace, so ask the workspace
+            // question. This branch never reaches the tab close API, so it must
+            // do its own check or a pinned pane would slip through unasked.
+            if self.state.should_confirm_workspace_close(ws_idx) {
+                self.state.selected = ws_idx;
+                self.state.confirm_close_target = crate::app::state::ConfirmCloseTarget::Workspace;
+                self.state.mode = Mode::ConfirmClose;
+                return true;
+            }
             self.close_workspace_idx_via_api(ws_idx);
-            // The close may itself have raised a confirmation (a pinned pane in
-            // the last tab), so report it instead of clearing the mode.
             return self.state.mode == Mode::ConfirmClose;
         }
         let tab_idx = self.state.workspaces[ws_idx].active_tab_index();
@@ -589,6 +596,16 @@ impl App {
         let Some((ws_idx, pane_id)) = self.focused_pane_target() else {
             return false;
         };
+        // Closing the last pane closes the workspace, so ask the workspace
+        // question rather than letting it go silently.
+        if self.state.close_pane_would_close_workspace(ws_idx, pane_id)
+            && self.state.should_confirm_workspace_close(ws_idx)
+        {
+            self.state.selected = ws_idx;
+            self.state.confirm_close_target = crate::app::state::ConfirmCloseTarget::Workspace;
+            self.state.mode = Mode::ConfirmClose;
+            return true;
+        }
         let Some(pane_id) = self.public_pane_id(ws_idx, pane_id) else {
             return false;
         };
@@ -3306,6 +3323,65 @@ navigate_pane_down = "ctrl+j"
         );
         assert_eq!(app.state.mode, Mode::ConfirmClose);
         assert_eq!(app.state.workspaces[0].tabs.len(), 2, "nothing closed yet");
+    }
+
+    #[tokio::test]
+    async fn closing_the_last_tab_asks_the_workspace_question() {
+        let mut app = app_with_test_workspaces(&["main"]);
+        app.state.active = Some(0);
+        app.state.selected = 0;
+        app.state.mode = Mode::Navigate;
+        app.state.ensure_test_terminals();
+        let pane_id = app.state.workspaces[0].tabs[0].root_pane;
+        app.state.workspaces[0].set_pane_pinned(pane_id, true);
+        assert_eq!(app.state.workspaces[0].tabs.len(), 1, "single tab");
+
+        let requires_confirmation = app.close_active_tab_via_api_requires_confirmation();
+
+        assert!(
+            requires_confirmation,
+            "closing the last tab closes the workspace, so it must ask"
+        );
+        assert_eq!(app.state.mode, Mode::ConfirmClose);
+        assert_eq!(
+            app.state.confirm_close_target,
+            crate::app::state::ConfirmCloseTarget::Workspace,
+            "it is the workspace that is about to go"
+        );
+        assert_eq!(app.state.workspaces.len(), 1, "nothing closed yet");
+    }
+
+    #[tokio::test]
+    async fn closing_the_last_tab_still_closes_outright_when_nothing_asks() {
+        let mut app = app_with_test_workspaces(&["main"]);
+        app.state.active = Some(0);
+        app.state.selected = 0;
+        app.state.mode = Mode::Navigate;
+        app.state.confirm_close = false;
+        app.state.ensure_test_terminals();
+
+        let requires_confirmation = app.close_active_tab_via_api_requires_confirmation();
+
+        assert!(!requires_confirmation);
+        assert!(app.state.workspaces.is_empty(), "workspace closed outright");
+    }
+
+    #[tokio::test]
+    async fn closing_the_last_pane_asks_the_workspace_question() {
+        let mut app = app_with_test_workspaces(&["main"]);
+        app.state.active = Some(0);
+        app.state.selected = 0;
+        app.state.mode = Mode::Navigate;
+        app.state.ensure_test_terminals();
+
+        let requires_confirmation = app.close_focused_pane_via_api_requires_confirmation();
+
+        assert!(
+            requires_confirmation,
+            "closing the last pane closes the workspace, so it must ask"
+        );
+        assert_eq!(app.state.mode, Mode::ConfirmClose);
+        assert_eq!(app.state.workspaces.len(), 1, "nothing closed yet");
     }
 
     #[tokio::test]
