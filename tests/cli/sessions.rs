@@ -185,6 +185,69 @@ fn named_sessions_use_separate_servers_and_workspace_state() {
 }
 
 #[test]
+fn dead_server_cli_reports_one_session_aware_json_line() {
+    fn assert_server_not_running(
+        output: std::process::Output,
+        socket_path: &Path,
+        attach_command: &str,
+    ) {
+        assert_eq!(
+            output.status.code(),
+            Some(1),
+            "stdout={} stderr={}",
+            String::from_utf8_lossy(&output.stdout),
+            String::from_utf8_lossy(&output.stderr)
+        );
+        assert!(output.stdout.is_empty(), "server errors belong on stderr");
+
+        let stderr = String::from_utf8(output.stderr).unwrap();
+        let lines: Vec<_> = stderr.lines().collect();
+        assert_eq!(lines.len(), 1, "expected exactly one JSON line: {stderr:?}");
+
+        let response: serde_json::Value = serde_json::from_str(lines[0]).unwrap();
+        assert_eq!(response["id"], "cli:workspace:create");
+        assert_eq!(response["error"]["code"], "server_not_running");
+        assert_eq!(
+            response["error"]["message"],
+            format!(
+                "no herdr server is running at {}; run `{attach_command}` to start or attach it",
+                socket_path.display()
+            )
+        );
+    }
+
+    let base = unique_test_dir();
+    let config_home = base.join("config");
+    let runtime_dir = base.join("runtime");
+    fs::create_dir_all(&runtime_dir).unwrap();
+    register_runtime_dir(&runtime_dir);
+
+    let named_socket = named_session_socket(&config_home, "foo");
+    let missing = run_named_cli(
+        &config_home,
+        &runtime_dir,
+        &["--session", "foo", "workspace", "create"],
+    );
+    assert_server_not_running(missing, &named_socket, "herdr session attach foo");
+
+    let stale_socket = runtime_dir.join("stale.sock");
+    drop(UnixListener::bind(&stale_socket).unwrap());
+    let stale = Command::new(env!("CARGO_BIN_EXE_herdr"))
+        .args(["workspace", "create"])
+        .env("XDG_CONFIG_HOME", &config_home)
+        .env("XDG_RUNTIME_DIR", &runtime_dir)
+        .env("HERDR_SOCKET_PATH", &stale_socket)
+        .env("HERDR_SESSION", "unrelated")
+        .env_remove("HERDR_CLIENT_SOCKET_PATH")
+        .env_remove("HERDR_ENV")
+        .output()
+        .unwrap();
+    assert_server_not_running(stale, &stale_socket, "herdr");
+
+    cleanup_test_base(&base);
+}
+
+#[test]
 fn integration_commands_run_locally_when_server_is_missing() {
     let base = unique_test_dir();
     let home_dir = base.join("home");
@@ -230,7 +293,7 @@ fn integration_commands_run_locally_when_server_is_missing() {
         .unwrap();
     assert_eq!(integration_status.status.code(), Some(0));
     let status_stdout = String::from_utf8_lossy(&integration_status.stdout);
-    assert!(status_stdout.contains("pi: current (v7)"));
+    assert!(status_stdout.contains("pi: current (v8)"));
     assert!(status_stdout.contains("claude: not installed"));
 
     let integration_uninstall = Command::new(env!("CARGO_BIN_EXE_herdr"))
@@ -326,7 +389,7 @@ fn status_commands_report_client_and_server_versions() {
         "stdout: {full_stdout}"
     );
     assert!(
-        full_stdout.contains("  protocol: 18"),
+        full_stdout.contains("  protocol: 22"),
         "stdout: {full_stdout}"
     );
     assert!(full_stdout.contains("server:\n"), "stdout: {full_stdout}");
@@ -335,11 +398,19 @@ fn status_commands_report_client_and_server_versions() {
         "stdout: {full_stdout}"
     );
     assert!(
-        full_stdout.contains("  compatible: yes"),
+        full_stdout.contains("  private_protocol_compatible: yes"),
+        "stdout: {full_stdout}"
+    );
+    assert!(
+        full_stdout.contains("  endpoint_compatible: yes"),
         "stdout: {full_stdout}"
     );
     assert!(
         full_stdout.contains("  restart_needed: no"),
+        "stdout: {full_stdout}"
+    );
+    assert!(
+        full_stdout.contains("  server_binary_stale: no"),
         "stdout: {full_stdout}"
     );
     assert!(
@@ -359,7 +430,7 @@ fn status_commands_report_client_and_server_versions() {
         "stdout: {server_stdout}"
     );
     assert!(
-        server_stdout.contains("protocol: 18"),
+        server_stdout.contains("private_protocol: 22"),
         "stdout: {server_stdout}"
     );
 
@@ -371,7 +442,11 @@ fn status_commands_report_client_and_server_versions() {
         "stdout: {client_stdout}"
     );
     assert!(
-        client_stdout.contains("protocol: 18"),
+        client_stdout.contains("protocol: 22"),
+        "stdout: {client_stdout}"
+    );
+    assert!(
+        client_stdout.contains("endpoint_protocol_generation: 1"),
         "stdout: {client_stdout}"
     );
     assert!(
@@ -381,26 +456,32 @@ fn status_commands_report_client_and_server_versions() {
 
     let full_json = run_cli_json(&socket_path, &["status", "--json"]);
     assert_eq!(full_json["client"]["version"], env!("CARGO_PKG_VERSION"));
-    assert_eq!(full_json["client"]["protocol"], 18);
+    assert_eq!(full_json["client"]["protocol"], 22);
+    assert_eq!(full_json["client"]["endpoint_protocol_generation"], 1);
     assert_eq!(full_json["server"]["status"], "running");
     assert_eq!(full_json["server"]["running"], true);
     assert_eq!(full_json["server"]["compatible"], true);
+    assert_eq!(full_json["server"]["endpoint_compatible"], true);
     assert_eq!(
         full_json["server"]["socket"],
         socket_path.display().to_string()
     );
     assert_eq!(full_json["server"]["restart_needed"], false);
+    assert_eq!(full_json["server"]["server_binary_stale"], false);
     assert_eq!(full_json["update"]["restart_needed"], false);
+    assert_eq!(full_json["update"]["server_binary_stale"], false);
 
     let server_json = run_cli_json(&socket_path, &["status", "server", "--json"]);
     assert_eq!(server_json["status"], "running");
     assert_eq!(server_json["version"], env!("CARGO_PKG_VERSION"));
-    assert_eq!(server_json["protocol"], 18);
+    assert_eq!(server_json["protocol"], 22);
     assert_eq!(server_json["compatible"], true);
+    assert_eq!(server_json["endpoint_compatible"], true);
 
     let client_json = run_cli_json(&socket_path, &["status", "client", "--json"]);
     assert_eq!(client_json["version"], env!("CARGO_PKG_VERSION"));
-    assert_eq!(client_json["protocol"], 18);
+    assert_eq!(client_json["protocol"], 22);
+    assert_eq!(client_json["endpoint_protocol_generation"], 1);
     assert!(client_json["binary"]
         .as_str()
         .is_some_and(|path| !path.is_empty()));
@@ -422,6 +503,10 @@ fn status_reports_not_running_when_server_socket_is_missing() {
     assert!(stdout.contains("  status: not running"), "stdout: {stdout}");
     assert!(stdout.contains("  restart_needed: no"), "stdout: {stdout}");
     assert!(
+        stdout.contains("  server_binary_stale: no"),
+        "stdout: {stdout}"
+    );
+    assert!(
         stdout.contains(&socket_path.display().to_string()),
         "stdout: {stdout}"
     );
@@ -434,7 +519,9 @@ fn status_reports_not_running_when_server_socket_is_missing() {
         socket_path.display().to_string()
     );
     assert_eq!(status_json["server"]["restart_needed"], false);
+    assert_eq!(status_json["server"]["server_binary_stale"], false);
     assert_eq!(status_json["update"]["restart_needed"], false);
+    assert_eq!(status_json["update"]["server_binary_stale"], false);
 
     cleanup_test_base(&base);
 }

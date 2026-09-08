@@ -25,6 +25,10 @@ const COMMON: &[(&str, &str)] = &[
     ("direction", "Direction to act in"),
     ("focus", "Focus it after creating it"),
     ("force", "Proceed even when it is unsafe"),
+    ("profile-id", "Saved machine profile to act on"),
+    ("right-click", "Where unmodified right-clicks go: \"herdr\" opens the pane menu, \"pane\" forwards them to the application"),
+    ("ssh-target", "SSH destination, like user@host or an ssh config alias"),
+    ("trust-repository", "Allow git to run in a repository owned by another user"),
     ("format", "Output format"),
     ("json", "Print JSON output"),
     ("label", "Display name"),
@@ -427,8 +431,14 @@ fn apply_at(command: Command, path: String) -> Command {
 
     let command = match examples_for(&path) {
         // Keep any examples the spec already set; ours are the fallback.
+        // `after_long_help` replaces `after_help` in long help, so carry any
+        // footer the spec set (the agent resources on command groups) along.
         Some(examples) if command.get_after_long_help().is_none() => {
-            command.after_long_help(format!("EXAMPLES:\n{examples}"))
+            let footer = command
+                .get_after_help()
+                .map(|footer| format!("\n\n{footer}"))
+                .unwrap_or_default();
+            command.after_long_help(format!("EXAMPLES:\n{examples}{footer}"))
         }
         _ => command,
     };

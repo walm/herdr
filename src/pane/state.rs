@@ -11,6 +11,8 @@ pub struct PaneState {
     /// Pinned panes ask for confirmation before closing, and make their tab and
     /// workspace ask too. Unpinned panes close immediately.
     pub pinned: bool,
+    /// Whether unmodified right-click gestures should be forwarded to the pane application.
+    pub right_click_passthrough: bool,
 }
 
 impl PaneState {
@@ -19,6 +21,7 @@ impl PaneState {
             attached_terminal_id,
             seen: true,
             pinned: false,
+            right_click_passthrough: false,
         }
     }
 }
