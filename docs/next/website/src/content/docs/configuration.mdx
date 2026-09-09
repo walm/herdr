@@ -348,7 +348,7 @@ Agent status uses compact colored dots by default. To distinguish blocked, worki
 status_indicators = "symbols"
 ```
 
-The symbols are static, so this option does not enable spinner animation.
+The symbols are static. For an animated working indicator, choose **animated spinner** in Settings or configure `status_indicators = "spinner"`: it uses the distinct symbols for blocked, done, idle, and unknown, and a braille spinner while an agent works. The animation runs only on the client you are looking at and only while a working agent is visible, so it costs the server nothing and stops on its own once agents go quiet.
 
 ### Sidebar row layouts
 

@@ -117,6 +117,14 @@ impl ClientShellState {
 }
 
 impl ClientShellConfig {
+    /// Indicator style with this frame's animation phase.
+    pub(crate) fn indicators(&self) -> super::StatusIndicators {
+        super::StatusIndicators {
+            style: self.status_indicators,
+            spinner_frame: self.spinner_frame,
+        }
+    }
+
     pub(crate) fn from_config(config: &Config) -> Self {
         let theme_runtime = crate::app::client_theme_runtime_from_config(config);
         Self {
@@ -138,6 +146,7 @@ impl ClientShellConfig {
             agent_panel_sort: config.ui.agent_panel_sort,
             agent_panel_scope: config.ui.agent_panel_scope,
             status_indicators: config.ui.status_indicators,
+            spinner_frame: 0,
             sound_enabled: config.ui.sound.enabled,
             toast_delivery: config.ui.toast.delivery,
             toast_delay_seconds: config.ui.toast.delay_seconds,

@@ -191,12 +191,43 @@ fn pane_surface_topology_signature(surface: &PaneSurfaceFrame) -> u64 {
     hash
 }
 
+/// Braille frames for the `spinner` indicator style; advanced by the client
+/// timer at roughly 8 frames a second while a working agent is visible.
+const SPINNER_FRAMES: &[&str] = &["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
+pub(crate) const SPINNER_FRAME_INTERVAL: std::time::Duration =
+    std::time::Duration::from_millis(120);
+
+/// The indicator style plus the current animation phase, resolved once per
+/// composed frame so every glyph in that frame agrees.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) struct StatusIndicators {
+    pub(crate) style: crate::config::StatusIndicatorStyle,
+    pub(crate) spinner_frame: usize,
+}
+
+impl From<crate::config::StatusIndicatorStyle> for StatusIndicators {
+    fn from(style: crate::config::StatusIndicatorStyle) -> Self {
+        Self {
+            style,
+            spinner_frame: 0,
+        }
+    }
+}
+
 fn status_icon(
     status: crate::api::schema::AgentStatus,
-    style: crate::config::StatusIndicatorStyle,
+    indicators: StatusIndicators,
 ) -> &'static str {
     use crate::api::schema::AgentStatus;
     use crate::config::StatusIndicatorStyle;
+    let style = match indicators.style {
+        StatusIndicatorStyle::Spinner if status == AgentStatus::Working => {
+            return SPINNER_FRAMES[indicators.spinner_frame % SPINNER_FRAMES.len()];
+        }
+        // Everything but the working frame reads like the symbols style.
+        StatusIndicatorStyle::Spinner => StatusIndicatorStyle::Symbols,
+        style => style,
+    };
     match (style, status) {
         (
             StatusIndicatorStyle::Dots,
@@ -209,11 +240,12 @@ fn status_icon(
         (StatusIndicatorStyle::Symbols, AgentStatus::Done) => "✓",
         (StatusIndicatorStyle::Symbols, AgentStatus::Idle) => "○",
         (StatusIndicatorStyle::Symbols, AgentStatus::Unknown) => "·",
+        (StatusIndicatorStyle::Spinner, _) => unreachable!("spinner resolves to symbols above"),
     }
 }
 
 fn status_dot(status: crate::api::schema::AgentStatus) -> &'static str {
-    status_icon(status, crate::config::StatusIndicatorStyle::Dots)
+    status_icon(status, crate::config::StatusIndicatorStyle::Dots.into())
 }
 
 fn status_priority(status: crate::api::schema::AgentStatus) -> u8 {

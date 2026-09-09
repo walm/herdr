@@ -87,6 +87,9 @@ pub(crate) struct ClientShellConfig {
     pub(super) agent_panel_sort: crate::config::AgentPanelSortConfig,
     pub(super) agent_panel_scope: crate::config::AgentPanelScopeConfig,
     pub(super) status_indicators: crate::config::StatusIndicatorStyle,
+    /// Animation phase for the `spinner` indicator style. Presentation state
+    /// that the client timer advances; it never leaves this client.
+    pub(super) spinner_frame: usize,
     pub(super) sound_enabled: bool,
     pub(super) toast_delivery: crate::config::ToastDelivery,
     pub(super) toast_delay_seconds: u64,
@@ -993,6 +996,8 @@ pub(crate) struct ClientShellState {
     pub(super) selection_autoscroll: Option<ClientSelectionAutoscroll>,
     pub(super) selection_autoscroll_deadline: Option<std::time::Instant>,
     pub(super) selection_highlight_clear_deadline: Option<std::time::Instant>,
+    /// When the next spinner frame is due; `None` while nothing animates.
+    pub(super) next_spinner_frame_at: Option<std::time::Instant>,
     pub(super) pending_word_selection: Option<u64>,
     pub(super) word_selection_generation: u64,
     pub(super) copy_mode: Option<ClientCopyModeState>,
@@ -1152,6 +1157,7 @@ impl ClientShellState {
             selection_autoscroll: None,
             selection_autoscroll_deadline: None,
             selection_highlight_clear_deadline: None,
+            next_spinner_frame_at: None,
             pending_word_selection: None,
             word_selection_generation: 0,
             copy_mode: None,
@@ -1931,9 +1937,56 @@ impl ClientShellState {
 
     pub(crate) fn timer_delay(&self, now: std::time::Instant) -> std::time::Duration {
         let default = std::time::Duration::from_millis(100);
-        self.selection_autoscroll_deadline
+        let delay = self
+            .selection_autoscroll_deadline
             .map(|deadline| deadline.saturating_duration_since(now).min(default))
-            .unwrap_or(default)
+            .unwrap_or(default);
+        match self.next_spinner_frame_at {
+            Some(deadline) => delay.min(deadline.saturating_duration_since(now)),
+            None => delay,
+        }
+    }
+
+    /// Whether any agent this client can show is working, which is the only
+    /// time the spinner style has something to animate.
+    fn has_working_agent(&self) -> bool {
+        let working = |snapshot: &ClientShellSnapshot| {
+            snapshot
+                .agents
+                .iter()
+                .any(|agent| agent.agent_status == crate::api::schema::AgentStatus::Working)
+        };
+        self.snapshot.as_deref().is_some_and(working)
+            || self
+                .endpoints
+                .iter()
+                .filter_map(|endpoint| endpoint.snapshot.as_deref())
+                .any(working)
+    }
+
+    /// Advance the spinner while it has something to show. Returns whether a
+    /// repaint is due. Cheap when idle: one scan of cached agent lists, no
+    /// wakeups scheduled unless an agent is working under the spinner style.
+    pub(crate) fn tick_spinner(&mut self, now: std::time::Instant) -> bool {
+        if self.config.status_indicators != crate::config::StatusIndicatorStyle::Spinner
+            || !self.has_working_agent()
+        {
+            self.next_spinner_frame_at = None;
+            return false;
+        }
+        match self.next_spinner_frame_at {
+            Some(deadline) if now < deadline => false,
+            Some(_) => {
+                self.config.spinner_frame = self.config.spinner_frame.wrapping_add(1);
+                self.next_spinner_frame_at = Some(now + super::SPINNER_FRAME_INTERVAL);
+                true
+            }
+            None => {
+                // First working agent: draw the first frame on the next tick.
+                self.next_spinner_frame_at = Some(now + super::SPINNER_FRAME_INTERVAL);
+                false
+            }
+        }
     }
 
     pub(crate) fn invalidate_pane_surface(&mut self) {
