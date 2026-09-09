@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use std::time::Instant;
 
-use crate::detect::{Agent, AgentState};
+use crate::detect::AgentState;
 use crate::layout::PaneId;
 use crate::terminal::{TerminalId, TerminalState};
 
@@ -11,18 +11,10 @@ use super::{Tab, Workspace};
 pub struct PaneDetail {
     pub pane_id: PaneId,
     pub tab_idx: usize,
-    pub tab_label: String,
-    pub label: String,
-    pub pane_label: Option<String>,
-    pub terminal_title: Option<String>,
-    pub terminal_title_stripped: Option<String>,
-    pub agent_label: String,
     pub agent_kind_label: Option<String>,
-    pub agent: Option<Agent>,
     pub state: AgentState,
     pub seen: bool,
     pub last_agent_state_change_seq: Option<u64>,
-    pub state_labels: HashMap<String, String>,
     pub tokens: HashMap<String, String>,
 }
 
@@ -31,32 +23,6 @@ impl Tab {
     /// so a single pinned pane makes the whole tab ask for confirmation.
     pub fn has_pinned_pane(&self) -> bool {
         self.panes.values().any(|pane| pane.pinned)
-    }
-
-    pub fn has_working_pane(&self, terminals: &HashMap<TerminalId, TerminalState>) -> bool {
-        self.panes.values().any(|pane| {
-            terminals
-                .get(&pane.attached_terminal_id)
-                .is_some_and(|terminal| terminal.state == AgentState::Working)
-        })
-    }
-
-    /// Highest-attention agent `(state, seen)` across this tab's panes, using the
-    /// same precedence as workspaces (blocked > done > working > idle > unknown).
-    /// Defaults to `(Unknown, true)` when the tab has no agent panes.
-    pub fn aggregate_state(
-        &self,
-        terminals: &HashMap<TerminalId, TerminalState>,
-    ) -> (AgentState, bool) {
-        self.panes
-            .values()
-            .filter_map(|pane| {
-                terminals
-                    .get(&pane.attached_terminal_id)
-                    .map(|terminal| (terminal.state, pane.seen))
-            })
-            .max_by_key(|(state, seen)| pane_attention_priority(*state, *seen))
-            .unwrap_or((AgentState::Unknown, true))
     }
 
     /// Marker of the most recently marked pane in this tab, with its report
@@ -74,12 +40,10 @@ impl Tab {
             })
             .max_by_key(|(_, reported_at)| *reported_at)
     }
-
     fn pane_details(
         &self,
         terminals: &HashMap<TerminalId, TerminalState>,
         tab_idx: usize,
-        tab_label: &str,
     ) -> Vec<PaneDetail> {
         self.layout
             .pane_ids()
@@ -88,32 +52,16 @@ impl Tab {
                 let pane = self.panes.get(id)?;
                 let terminal = terminals.get(&pane.attached_terminal_id)?;
                 let agent_kind_label = terminal.effective_agent_label().map(str::to_string);
-                let fallback_agent_label = terminal
-                    .agent_name
-                    .as_deref()
-                    .or(agent_kind_label.as_deref())?
-                    .to_string();
-                let agent_label = terminal
-                    .effective_display_agent()
-                    .unwrap_or_else(|| fallback_agent_label.clone());
-                let presentation = terminal.effective_presentation();
+                if terminal.agent_name.is_none() && agent_kind_label.is_none() {
+                    return None;
+                }
                 Some(PaneDetail {
                     pane_id: *id,
                     tab_idx,
-                    tab_label: tab_label.to_string(),
-                    label: agent_label.clone(),
-                    pane_label: terminal
-                        .effective_title()
-                        .or_else(|| terminal.manual_label.clone()),
-                    terminal_title: terminal.terminal_title.clone(),
-                    terminal_title_stripped: terminal.terminal_title_stripped(),
-                    agent_label,
                     agent_kind_label,
-                    agent: terminal.effective_known_agent(),
                     state: terminal.state,
                     seen: pane.seen,
                     last_agent_state_change_seq: terminal.last_agent_state_change_seq,
-                    state_labels: presentation.state_labels,
                     tokens: terminal.metadata_tokens.values(),
                 })
             })
@@ -138,13 +86,14 @@ impl Workspace {
     ) -> (AgentState, bool) {
         self.tabs
             .iter()
-            .map(|tab| tab.aggregate_state(terminals))
+            .flat_map(|tab| tab.panes.values())
+            .filter_map(|pane| {
+                terminals
+                    .get(&pane.attached_terminal_id)
+                    .map(|terminal| (terminal.state, pane.seen))
+            })
             .max_by_key(|(state, seen)| pane_attention_priority(*state, *seen))
             .unwrap_or((AgentState::Unknown, true))
-    }
-
-    pub fn has_working_pane(&self, terminals: &HashMap<TerminalId, TerminalState>) -> bool {
-        self.tabs.iter().any(|tab| tab.has_working_pane(terminals))
     }
 
     /// Marker of the most recently marked tab in this workspace.
@@ -157,24 +106,11 @@ impl Workspace {
             .filter_map(|tab| tab.aggregate_marker(terminals))
             .max_by_key(|(_, reported_at)| *reported_at)
     }
-
     pub fn pane_details(&self, terminals: &HashMap<TerminalId, TerminalState>) -> Vec<PaneDetail> {
-        let multi_tab = self.tabs.len() > 1;
         self.tabs
             .iter()
             .enumerate()
-            .flat_map(|(tab_idx, tab)| {
-                let tab_label = self
-                    .tab_display_name(tab_idx)
-                    .unwrap_or_else(|| (tab_idx + 1).to_string());
-                tab.pane_details(terminals, tab_idx, &tab_label).into_iter()
-            })
-            .map(|mut detail| {
-                if multi_tab {
-                    detail.label = format!("{}·{}", detail.tab_label, detail.agent_label);
-                }
-                detail
-            })
+            .flat_map(|(tab_idx, tab)| tab.pane_details(terminals, tab_idx))
             .collect()
     }
 }
@@ -329,70 +265,6 @@ mod tests {
 
         assert_eq!(state, AgentState::Idle);
         assert!(!seen);
-    }
-
-    #[test]
-    fn pane_details_prefers_agent_name_over_detected_agent_label() {
-        let ws = Workspace::test_new("test");
-        let root_pane = ws.tabs[0].root_pane;
-        let mut terminals = HashMap::new();
-        let mut terminal = terminal_for_pane(&ws, root_pane);
-        terminal.set_detected_state(Some(Agent::Pi), AgentState::Working);
-        terminal.set_agent_name("planner".into());
-        terminals.insert(terminal.id.clone(), terminal);
-
-        let labels: Vec<_> = ws
-            .pane_details(&terminals)
-            .into_iter()
-            .map(|detail| (detail.label, detail.agent_label, detail.agent))
-            .collect();
-
-        assert_eq!(
-            labels,
-            vec![("planner".into(), "planner".into(), Some(Agent::Pi))]
-        );
-    }
-
-    #[test]
-    fn pane_details_includes_tab_context_for_multi_tab_workspace() {
-        let mut ws = Workspace::test_new("test");
-        ws.tabs[0].custom_name = Some("main".into());
-        let root_pane = ws.tabs[0].root_pane;
-        let second_tab = ws.test_add_tab(Some("review"));
-        let review_pane = ws.tabs[second_tab].root_pane;
-        let mut terminals = HashMap::new();
-        let mut root_terminal = terminal_for_pane(&ws, root_pane);
-        root_terminal.set_hook_authority(
-            "test".into(),
-            "pi".into(),
-            AgentState::Working,
-            None,
-            None,
-        );
-        terminals.insert(root_terminal.id.clone(), root_terminal);
-        let mut review_terminal = terminal_for_pane(&ws, review_pane);
-        review_terminal.set_hook_authority(
-            "test".into(),
-            "claude".into(),
-            AgentState::Idle,
-            None,
-            None,
-        );
-        terminals.insert(review_terminal.id.clone(), review_terminal);
-
-        let labels: Vec<_> = ws
-            .pane_details(&terminals)
-            .into_iter()
-            .map(|detail| (detail.label, detail.agent_label, detail.agent))
-            .collect();
-
-        assert_eq!(
-            labels,
-            vec![
-                ("main·pi".into(), "pi".into(), Some(Agent::Pi)),
-                ("review·claude".into(), "claude".into(), Some(Agent::Claude)),
-            ]
-        );
     }
 
     #[test]
