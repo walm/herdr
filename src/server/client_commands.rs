@@ -47,6 +47,7 @@ const CLIENT_SHELL_METHODS: &[&str] = &[
     "workspace.move",
     "workspace.move_block",
     "workspace.rename",
+    "workspace.set_color",
     "worktree.create",
     "worktree.list",
     "worktree.open",

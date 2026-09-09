@@ -1024,6 +1024,9 @@ pub struct ClientShellWorkspace {
     /// Most recently reported pane marker across this workspace's tabs.
     #[serde(default)]
     pub marker: Option<String>,
+    /// User-chosen accent color, shown on the tab-bar workspace label.
+    #[serde(default)]
+    pub color: Option<crate::workspace::WorkspaceColor>,
     #[serde(deserialize_with = "deserialize_client_shell_agent_status")]
     pub agent_status: crate::api::schema::AgentStatus,
 }
@@ -2666,6 +2669,7 @@ mod tests {
                 focused: true,
                 agent_status: crate::api::schema::AgentStatus::Idle,
                 marker: None,
+                color: None,
             }],
             tabs: vec![ClientShellTab {
                 tab_id: "w1:t1".into(),

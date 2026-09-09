@@ -33,6 +33,14 @@ pub struct WorkspaceRenameParams {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
+pub struct WorkspaceSetColorParams {
+    pub workspace_id: String,
+    /// One of mauve, red, peach, yellow, green, teal, blue; null clears the color.
+    #[serde(default)]
+    pub color: Option<crate::workspace::WorkspaceColor>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
 pub struct WorkspaceMoveParams {
     pub workspace_id: String,
     pub insert_index: usize,
@@ -73,6 +81,9 @@ pub struct WorkspaceInfo {
     pub tokens: HashMap<String, String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub worktree: Option<WorkspaceWorktreeInfo>,
+    /// User-chosen accent color for the workspace label in the tab bar.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub color: Option<crate::workspace::WorkspaceColor>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]

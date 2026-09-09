@@ -101,6 +101,34 @@ impl App {
         )
     }
 
+    pub(super) fn handle_workspace_set_color(
+        &mut self,
+        id: String,
+        params: crate::api::schema::WorkspaceSetColorParams,
+    ) -> String {
+        let Some(index) = self.parse_workspace_id(&params.workspace_id) else {
+            return workspace_not_found(id, &params.workspace_id);
+        };
+        let Some(ws) = self.state.workspaces.get_mut(index) else {
+            return workspace_not_found(id, &params.workspace_id);
+        };
+        ws.set_custom_color(params.color);
+        self.schedule_session_save();
+        self.emit_event(EventEnvelope {
+            event: EventKind::WorkspaceUpdated,
+            data: EventData::WorkspaceUpdated {
+                workspace: self.workspace_info(index),
+            },
+        });
+
+        encode_success(
+            id,
+            ResponseResult::WorkspaceInfo {
+                workspace: self.workspace_info(index),
+            },
+        )
+    }
+
     pub(super) fn handle_workspace_rename(
         &mut self,
         id: String,
@@ -752,6 +780,59 @@ mod tests {
                         .is_some_and(|worktree| worktree.is_linked_worktree)
             )
         }));
+    }
+
+    #[test]
+    fn api_workspace_set_color_persists_and_reaches_the_client_snapshot() {
+        let event_hub = crate::api::EventHub::default();
+        let (_api_tx, api_rx) = tokio::sync::mpsc::unbounded_channel();
+        let mut app = App::new(
+            &Config::default(),
+            crate::app::AppPolicy::TEST,
+            None,
+            api_rx,
+            event_hub.clone(),
+        );
+        app.state.workspaces = vec![Workspace::test_new("one")];
+        app.state.active = Some(0);
+        let workspace_id = app.public_workspace_id(0);
+
+        let response = app.handle_workspace_set_color(
+            "req".into(),
+            crate::api::schema::WorkspaceSetColorParams {
+                workspace_id: workspace_id.clone(),
+                color: Some(crate::workspace::WorkspaceColor::Teal),
+            },
+        );
+        let response: SuccessResponse = serde_json::from_str(&response).unwrap();
+        let ResponseResult::WorkspaceInfo { workspace } = response.result else {
+            panic!("expected workspace info");
+        };
+        assert_eq!(
+            workspace.color,
+            Some(crate::workspace::WorkspaceColor::Teal)
+        );
+        assert_eq!(
+            app.state.workspaces[0].custom_color,
+            Some(crate::workspace::WorkspaceColor::Teal)
+        );
+        assert!(event_hub
+            .events_after(0)
+            .iter()
+            .any(|(_, event)| event.event == EventKind::WorkspaceUpdated));
+
+        let response = app.handle_workspace_set_color(
+            "req".into(),
+            crate::api::schema::WorkspaceSetColorParams {
+                workspace_id,
+                color: None,
+            },
+        );
+        assert!(
+            response.contains("\"type\":\"workspace_info\""),
+            "{response}"
+        );
+        assert_eq!(app.state.workspaces[0].custom_color, None);
     }
 
     #[test]

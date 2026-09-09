@@ -1072,6 +1072,19 @@
           ],
           "type": "object"
         },
+        "WorkspaceColor": {
+          "description": "A user-chosen accent color for a workspace, drawn from the theme palette so it\nstays theme-aware. Resolved to a concrete color via `Palette::workspace_color`.",
+          "enum": [
+            "mauve",
+            "red",
+            "peach",
+            "yellow",
+            "green",
+            "teal",
+            "blue"
+          ],
+          "type": "string"
+        },
         "WorkspaceInfo": {
           "properties": {
             "active_tab_id": {
@@ -1079,6 +1092,17 @@
             },
             "agent_status": {
               "$ref": "#/schemas/event/$defs/AgentStatus"
+            },
+            "color": {
+              "anyOf": [
+                {
+                  "$ref": "#/schemas/event/$defs/WorkspaceColor"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "User-chosen accent color for the workspace label in the tab bar."
             },
             "focused": {
               "type": "boolean"
@@ -4515,6 +4539,19 @@
           ],
           "type": "object"
         },
+        "WorkspaceColor": {
+          "description": "A user-chosen accent color for a workspace, drawn from the theme palette so it\nstays theme-aware. Resolved to a concrete color via `Palette::workspace_color`.",
+          "enum": [
+            "mauve",
+            "red",
+            "peach",
+            "yellow",
+            "green",
+            "teal",
+            "blue"
+          ],
+          "type": "string"
+        },
         "WorkspaceCreateParams": {
           "properties": {
             "cwd": {
@@ -4644,6 +4681,29 @@
             "workspace_id",
             "source",
             "tokens"
+          ],
+          "type": "object"
+        },
+        "WorkspaceSetColorParams": {
+          "properties": {
+            "color": {
+              "anyOf": [
+                {
+                  "$ref": "#/schemas/request/$defs/WorkspaceColor"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "description": "One of mauve, red, peach, yellow, green, teal, blue; null clears the color."
+            },
+            "workspace_id": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "workspace_id"
           ],
           "type": "object"
         },
@@ -5112,6 +5172,22 @@
             },
             "params": {
               "$ref": "#/schemas/request/$defs/WorkspaceRenameParams"
+            }
+          },
+          "required": [
+            "method",
+            "params"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "method": {
+              "const": "workspace.set_color",
+              "type": "string"
+            },
+            "params": {
+              "$ref": "#/schemas/request/$defs/WorkspaceSetColorParams"
             }
           },
           "required": [
@@ -10762,6 +10838,19 @@
           ],
           "type": "object"
         },
+        "WorkspaceColor": {
+          "description": "A user-chosen accent color for a workspace, drawn from the theme palette so it\nstays theme-aware. Resolved to a concrete color via `Palette::workspace_color`.",
+          "enum": [
+            "mauve",
+            "red",
+            "peach",
+            "yellow",
+            "green",
+            "teal",
+            "blue"
+          ],
+          "type": "string"
+        },
         "WorkspaceInfo": {
           "properties": {
             "active_tab_id": {
@@ -10769,6 +10858,17 @@
             },
             "agent_status": {
               "$ref": "#/schemas/success_response/$defs/AgentStatus"
+            },
+            "color": {
+              "anyOf": [
+                {
+                  "$ref": "#/schemas/success_response/$defs/WorkspaceColor"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "User-chosen accent color for the workspace label in the tab bar."
             },
             "focused": {
               "type": "boolean"

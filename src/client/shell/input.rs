@@ -562,6 +562,17 @@ impl ClientShellState {
                 } else {
                     ClientShellMode::Terminal
                 };
+                // A user binding on the prefix key itself (prefix+prefix) is an
+                // explicit opt-in that wins over sending a literal prefix; the
+                // config layer only registers such a binding when the user set it.
+                if let Some(binding) =
+                    crate::input::resolve_prefix_binding(&self.config.keybinds.keybinds, key)
+                {
+                    self.mode = return_mode;
+                    outcome.repaint = true;
+                    self.record_binding(binding, outcome);
+                    return None;
+                }
                 if crate::config::terminal_key_matches_combo(key, self.config.keybinds.prefix) {
                     self.mode = return_mode;
                     outcome.repaint = true;
@@ -570,14 +581,6 @@ impl ClientShellState {
                 if key.code == KeyCode::Esc {
                     self.mode = return_mode;
                     outcome.repaint = true;
-                    return None;
-                }
-                if let Some(binding) =
-                    crate::input::resolve_prefix_binding(&self.config.keybinds.keybinds, key)
-                {
-                    self.mode = return_mode;
-                    outcome.repaint = true;
-                    self.record_binding(binding, outcome);
                     return None;
                 }
                 self.mode = return_mode;
@@ -854,6 +857,9 @@ impl ClientShellState {
                 super::aggregate_navigation::online_agent_targets(
                     &self.endpoints,
                     self.config.agent_panel_sort,
+                    self.agent_scope_workspace()
+                        .as_deref()
+                        .map(|workspace_id| (&self.active_endpoint_id, workspace_id)),
                 )
                 .get(*index)
                 .is_some()

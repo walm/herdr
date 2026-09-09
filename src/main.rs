@@ -166,6 +166,7 @@ const DEFAULT_CONFIG: &str = r##"# herdr configuration
 # next_tab = "prefix+n"
 # move_tab_previous = ""   # optional, e.g. "alt+shift+left" moves the tab toward the front
 # move_tab_next = ""       # optional, e.g. "alt+shift+right" moves the tab toward the back
+# last_tab = "prefix+a"     # toggle back to the previously active tab in this workspace
 # switch_tab = "prefix+1..9"
 # switch_workspace = ""   # optional indexed binding, e.g. "prefix+shift+1..9"
 # close_tab = "prefix+shift+x"
@@ -314,6 +315,20 @@ const DEFAULT_CONFIG: &str = r##"# herdr configuration
 # tab bar and on sidebar workspace rows. Nothing renders unless a marker is set.
 # tab_markers = true
 
+# Show the hint bar at the bottom of the screen while prefix mode is active.
+# show_prefix_hint = true
+
+# Prefix each named tab with its position number, e.g. "1: main".
+# tab_number_prefix = false
+
+# Show each tab's agent status (working, blocked, done) at the end of the tab.
+# tab_agent_status = false
+
+# Show the active workspace name at the right of the tab bar, tinted with its
+# color (right-click a workspace > Set color). "auto" only while the sidebar is
+# collapsed, "on" always, "off" never.
+# workspace_tab_label = "auto"
+
 # Desktop tab row placement: "top" or "bottom".
 # tab_bar_position = "top"
 
@@ -334,6 +349,10 @@ const DEFAULT_CONFIG: &str = r##"# herdr configuration
 # Agent panel ordering: "spaces" (grouped by space) or "priority" (attention queue).
 # "workspaces" is accepted as an alias for "spaces".
 # agent_panel_sort = "spaces"
+
+# Which agents the sidebar lists: "all" workspaces, or only the "current" one.
+# Click the all/current toggle in the agents header to switch at runtime.
+# agent_panel_scope = "all"
 
 # Agent status indicators: "dots" preserves the compact color marks; "symbols" uses
 # distinct static glyphs for blocked, working, done, idle, and unknown states.

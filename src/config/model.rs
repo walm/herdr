@@ -101,11 +101,21 @@ pub enum AgentPanelSortConfig {
     Priority,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, Serialize, Default)]
 #[serde(rename_all = "lowercase")]
-enum LegacyAgentPanelScopeConfig {
+pub enum AgentPanelScopeConfig {
     Current,
+    #[default]
     All,
+}
+
+impl AgentPanelScopeConfig {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Current => "current",
+            Self::All => "all",
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, Serialize, Default)]
@@ -395,6 +405,8 @@ pub struct KeysConfig {
     pub move_tab_previous: BindingConfig,
     /// Move the active tab one position toward the back. Unset by default.
     pub move_tab_next: BindingConfig,
+    /// Switch back to the previously active tab in the workspace. Default: "prefix+a".
+    pub last_tab: BindingConfig,
     /// Switch to tab 1-9. Default: "prefix+1..9".
     pub switch_tab: BindingConfig,
     /// Switch to workspace 1-9 from prefix mode. Unset by default.
@@ -530,6 +542,8 @@ pub(crate) struct KeysConfigOverlay {
     #[serde(skip_serializing_if = "Option::is_none")]
     move_tab_next: Option<BindingConfig>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    last_tab: Option<BindingConfig>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     switch_tab: Option<BindingConfig>,
     #[serde(skip_serializing_if = "Option::is_none")]
     switch_workspace: Option<BindingConfig>,
@@ -647,6 +661,7 @@ impl<'de> Deserialize<'de> for KeysConfig {
         apply_field!(next_tab);
         apply_field!(move_tab_previous);
         apply_field!(move_tab_next);
+        apply_field!(last_tab);
         apply_field!(switch_tab);
         apply_field!(switch_workspace);
         apply_field!(close_tab);
@@ -753,6 +768,7 @@ impl KeysConfig {
         copy_effective_action_field!(next_tab, keybinds.next_tab);
         copy_effective_action_field!(move_tab_previous, keybinds.move_tab_previous);
         copy_effective_action_field!(move_tab_next, keybinds.move_tab_next);
+        copy_effective_action_field!(last_tab, keybinds.last_tab);
         copy_effective_indexed_field!(switch_tab, keybinds.switch_tab);
         copy_effective_indexed_field!(switch_workspace, keybinds.switch_workspace);
         copy_effective_action_field!(close_tab, keybinds.close_tab);
@@ -844,6 +860,15 @@ pub struct IndexedKeysConfig {
 pub struct WorktreesConfig {
     /// Root directory under which Herdr creates <repo>/<branch-slug> checkouts.
     pub directory: String,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, Serialize, Default)]
+#[serde(rename_all = "lowercase")]
+pub enum WorkspaceTabLabelConfig {
+    #[default]
+    Auto,
+    On,
+    Off,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, Serialize, Default)]
@@ -959,6 +984,16 @@ pub struct UiConfig {
     /// Show agent/CLI-reported markers in the tab bar and on sidebar workspace
     /// rows. Nothing renders unless a marker is reported. Default: true.
     pub tab_markers: bool,
+    /// Show the prefix hint bar while in prefix mode. Default: true.
+    pub show_prefix_hint: bool,
+    /// Prefix each named tab label in the tab bar with its position number. Default: false.
+    pub tab_number_prefix: bool,
+    /// Show each tab's aggregate agent status (working, blocked, done) at the end
+    /// of the tab in the tab bar. Default: false.
+    pub tab_agent_status: bool,
+    /// Show the active workspace name at the right of the tab bar. "auto" shows it
+    /// only when the sidebar is collapsed, "on" always, "off" never. Default: "auto".
+    pub workspace_tab_label: WorkspaceTabLabelConfig,
     /// Desktop tab row placement. Default: top.
     pub tab_bar_position: TabBarPositionConfig,
     /// Ordered entries shown at the right edge of the desktop tab row. Empty by default.
@@ -970,9 +1005,9 @@ pub struct UiConfig {
     pub window_title: String,
     /// Agent sidebar ordering. Saved values are "spaces" or "priority". Default: "spaces".
     pub agent_panel_sort: AgentPanelSortConfig,
-    /// Retired setting that Herdr wrote before the workspace filter was removed.
-    #[serde(rename = "agent_panel_scope")]
-    _legacy_agent_panel_scope: Option<LegacyAgentPanelScopeConfig>,
+    /// Agent sidebar scope. "current" lists only agents in the current workspace,
+    /// "all" lists agents across every workspace. Default: "all".
+    pub agent_panel_scope: AgentPanelScopeConfig,
     /// Agent status indicator style. Saved values are "dots" or "symbols". Default: "dots".
     pub status_indicators: StatusIndicatorStyle,
     /// Expanded sidebar row composition.
@@ -1126,6 +1161,7 @@ impl Default for KeysConfig {
             next_tab: BindingConfig::one("prefix+n"),
             move_tab_previous: BindingConfig::empty(),
             move_tab_next: BindingConfig::empty(),
+            last_tab: BindingConfig::one("prefix+a"),
             switch_tab: BindingConfig::one("prefix+1..9"),
             switch_workspace: BindingConfig::empty(),
             close_tab: BindingConfig::one("prefix+shift+x"),
@@ -1195,12 +1231,16 @@ impl Default for UiConfig {
             show_agent_labels_on_pane_borders: false,
             hide_tab_bar_when_single_tab: false,
             tab_markers: true,
+            show_prefix_hint: true,
+            tab_number_prefix: false,
+            tab_agent_status: false,
+            workspace_tab_label: WorkspaceTabLabelConfig::Auto,
             tab_bar_position: TabBarPositionConfig::Top,
             tab_bar_right: Vec::new(),
             tab_bar_right_separator: " ".into(),
             window_title: super::window_title::default_window_title(),
             agent_panel_sort: AgentPanelSortConfig::Spaces,
-            _legacy_agent_panel_scope: None,
+            agent_panel_scope: AgentPanelScopeConfig::All,
             status_indicators: StatusIndicatorStyle::Dots,
             sidebar: SidebarConfig::default(),
             accent: "cyan".into(),
@@ -1555,6 +1595,38 @@ prompt_new_tab_name = false
 "#;
         let config: Config = toml::from_str(toml).unwrap();
         assert!(!config.ui.prompt_new_tab_name);
+    }
+
+    #[test]
+    fn restored_tab_bar_settings_default_and_parse() {
+        let defaults = Config::default();
+        assert!(defaults.ui.show_prefix_hint);
+        assert!(!defaults.ui.tab_number_prefix);
+        assert!(!defaults.ui.tab_agent_status);
+        assert_eq!(
+            defaults.ui.workspace_tab_label,
+            WorkspaceTabLabelConfig::Auto
+        );
+        assert_eq!(defaults.ui.agent_panel_scope, AgentPanelScopeConfig::All);
+
+        let toml = r#"
+[ui]
+show_prefix_hint = false
+tab_number_prefix = true
+tab_agent_status = true
+workspace_tab_label = "on"
+agent_panel_scope = "current"
+"#;
+        let config: Config = toml::from_str(toml).unwrap();
+        assert!(!config.ui.show_prefix_hint);
+        assert!(config.ui.tab_number_prefix);
+        assert!(config.ui.tab_agent_status);
+        assert_eq!(config.ui.workspace_tab_label, WorkspaceTabLabelConfig::On);
+        assert_eq!(config.ui.agent_panel_scope, AgentPanelScopeConfig::Current);
+        assert!(
+            config.collect_diagnostics().is_empty(),
+            "restored keys must not be reported as unknown"
+        );
     }
 
     #[test]

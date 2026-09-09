@@ -42,6 +42,12 @@ pub(super) fn workspace_rename(params: WorkspaceRenameParams) -> std::io::Result
     print_method_response("cli:workspace:rename", Method::WorkspaceRename(params))
 }
 
+pub(super) fn workspace_set_color(
+    params: crate::api::schema::WorkspaceSetColorParams,
+) -> std::io::Result<i32> {
+    print_method_response("cli:workspace:set_color", Method::WorkspaceSetColor(params))
+}
+
 pub(super) fn workspace_close(params: WorkspaceCloseParams) -> std::io::Result<i32> {
     print_method_response("cli:workspace:close", Method::WorkspaceClose(params))
 }

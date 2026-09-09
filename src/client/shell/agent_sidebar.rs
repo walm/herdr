@@ -12,6 +12,7 @@ use super::*;
 
 pub(super) struct AgentRow {
     pub(super) pane_id: String,
+    pub(super) workspace_id: String,
     pub(super) status: crate::api::schema::AgentStatus,
     pub(super) focused: bool,
     pub(super) rows: Vec<Vec<crate::ui::ResolvedToken>>,
@@ -49,11 +50,29 @@ pub(super) fn ordered_agent_pane_ids(
         .collect()
 }
 
+/// The workspace the agents panel is scoped to under
+/// `ui.agent_panel_scope = "current"`, or `None` to list every workspace.
+/// While the user browses the sidebar the highlighted workspace wins, so the
+/// list follows the cursor; otherwise it tracks the focused workspace.
+pub(super) fn agent_scope_workspace(
+    config: &ClientShellConfig,
+    selected_workspace_id: Option<&str>,
+    snapshot: Option<&ClientShellSnapshot>,
+) -> Option<String> {
+    match config.agent_panel_scope {
+        crate::config::AgentPanelScopeConfig::All => None,
+        crate::config::AgentPanelScopeConfig::Current => selected_workspace_id
+            .map(str::to_owned)
+            .or_else(|| snapshot.and_then(|snapshot| snapshot.focused_workspace_id.clone())),
+    }
+}
+
 pub(super) fn render_agent_panel(
     buffer: &mut Buffer,
     area: Rect,
     snapshot: &ClientShellSnapshot,
     config: &ClientShellConfig,
+    scope_workspace_id: Option<&str>,
     agent_scroll: &mut usize,
     hits: &mut ShellHitMap,
 ) {
@@ -67,7 +86,10 @@ pub(super) fn render_agent_panel(
         return;
     }
 
-    let rows = agent_rows(snapshot, config, None);
+    let mut rows = agent_rows(snapshot, config, None);
+    if let Some(workspace_id) = scope_workspace_id {
+        rows.retain(|row| row.workspace_id == workspace_id);
+    }
     render_agent_list(
         buffer,
         area,
@@ -134,6 +156,28 @@ pub(super) fn render_agent_panel_header(
     } else {
         Rect::default()
     };
+    // Scope toggle just left of the sort toggle, with a one-column gap. It is
+    // hidden rather than squeezed when the sidebar is too narrow for both.
+    let scope_label = config.agent_panel_scope.as_str();
+    let scope_width = display_width(scope_label) as u16;
+    let scope_right = sort_rect.x.saturating_sub(1);
+    hits.agent_scope_toggle = Rect::default();
+    if agent_view_label.is_none() && scope_right >= area.x.saturating_add(scope_width + 8) {
+        let scope_rect = Rect::new(scope_right - scope_width, area.y + 1, scope_width, 1);
+        put_text(
+            buffer,
+            scope_rect.x,
+            scope_rect.y,
+            scope_rect.width,
+            scope_label,
+            Style::default()
+                .fg(config.palette.overlay0)
+                .add_modifier(Modifier::BOLD),
+        );
+        if config.mouse_capture {
+            hits.agent_scope_toggle = scope_rect;
+        }
+    }
     put_text(
         buffer,
         sort_rect.x,
@@ -302,6 +346,7 @@ pub(super) fn agent_rows(
                 state_text,
             );
             Some(AgentRow {
+                workspace_id: agent.workspace_id.clone(),
                 pane_id: agent.pane_id.clone(),
                 status: agent.agent_status,
                 focused: agent.focused,

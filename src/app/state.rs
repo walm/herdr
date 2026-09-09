@@ -74,6 +74,20 @@ pub struct Palette {
 }
 
 impl Palette {
+    /// Resolve a user-chosen workspace color to a concrete theme color.
+    pub fn workspace_color(&self, color: crate::workspace::WorkspaceColor) -> Color {
+        use crate::workspace::WorkspaceColor;
+        match color {
+            WorkspaceColor::Mauve => self.mauve,
+            WorkspaceColor::Red => self.red,
+            WorkspaceColor::Peach => self.peach,
+            WorkspaceColor::Yellow => self.yellow,
+            WorkspaceColor::Green => self.green,
+            WorkspaceColor::Teal => self.teal,
+            WorkspaceColor::Blue => self.blue,
+        }
+    }
+
     /// Catppuccin Mocha — the default.
     pub fn catppuccin() -> Self {
         Self {

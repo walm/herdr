@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Restored on the new client shell after the 0.9 sync: `keys.last_tab` (default `prefix+a`), `ui.show_prefix_hint`, `ui.tab_number_prefix`, `ui.tab_agent_status`, `ui.workspace_tab_label` with per-workspace colors, and `ui.agent_panel_scope` with its all/current toggle in the agents header. Colors are now a server fact: set them from the sidebar right-click menu ("Set color") or with `herdr workspace set-color <workspace> <color|none>`, and they appear in `herdr workspace get` and persist across restarts. Binding an action to the prefix key itself (for example `last_tab = "prefix+ctrl+a"` with `prefix = "ctrl+a"`) once again wins over sending a literal prefix.
+
 - Panes can be pinned so closing them asks first. Pin from the pane right-click menu or with `herdr pane pin <pane>`; a pinned pane shows a marker on its border, and closing its tab or workspace asks too. Unpinned panes close immediately as before. `herdr pane close --force` skips the prompt, and pins persist across restarts. Bind `keys.toggle_pin_pane` to pin the focused pane from the keyboard (unset by default), and filter with `herdr pane list --pinned` / `--unpinned`. `herdr tab close --force` skips the prompt for a tab holding a pinned pane. Closing the last tab or the last pane in a workspace now shows the workspace confirmation instead of closing it silently.
 
 - Every CLI argument now carries help text, and `--help` appends copy-pasteable EXAMPLES while `-h` stays terse. Help text lives in a lookup table applied to the command spec, so `herdr <command> --help` documents every flag an agent or script can reach.

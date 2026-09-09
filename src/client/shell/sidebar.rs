@@ -412,11 +412,17 @@ pub(crate) fn render_sidebar(
         }
     }
 
+    let scope_workspace_id = super::agent_sidebar::agent_scope_workspace(
+        config,
+        state.selected_workspace_id,
+        Some(snapshot),
+    );
     super::render_agent_panel(
         buffer,
         detail_area,
         snapshot,
         config,
+        scope_workspace_id.as_deref(),
         state.agent_scroll,
         hits,
     );

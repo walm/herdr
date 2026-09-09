@@ -87,10 +87,16 @@ pub(super) fn aggregate_agent_rows(
 pub(super) fn online_agent_targets(
     endpoints: &[ClientShellEndpoint],
     sort: crate::config::AgentPanelSortConfig,
+    scope: Option<(&ClientEndpointId, &str)>,
 ) -> Vec<AggregateAgentTarget> {
     aggregate_agent_rows(endpoints, sort)
         .into_iter()
         .filter(|row| !row.endpoint.stale())
+        .filter(|row| {
+            scope.is_none_or(|(endpoint_id, workspace_id)| {
+                row.endpoint.endpoint_id == endpoint_id && row.agent.workspace_id == workspace_id
+            })
+        })
         .map(|row| AggregateAgentTarget {
             endpoint_id: row.endpoint.endpoint_id.clone(),
             pane_id: row.agent.pane_id.clone(),

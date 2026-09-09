@@ -6,15 +6,18 @@ impl ClientContextMenuOverlay {
 
         let item = |label, action| ClientContextMenuItem { label, action };
         match &self.target {
-            ClientContextMenuTarget::Workspace { is_git: false, .. } => {
-                vec![item("Rename", Action::Rename), item("Close", Action::Close)]
-            }
+            ClientContextMenuTarget::Workspace { is_git: false, .. } => vec![
+                item("Rename", Action::Rename),
+                item("Set color", Action::SetColor),
+                item("Close", Action::Close),
+            ],
             ClientContextMenuTarget::Workspace {
                 is_linked_worktree: false,
                 has_worktree_children: false,
                 ..
             } => vec![
                 item("Rename", Action::Rename),
+                item("Set color", Action::SetColor),
                 item("Close", Action::Close),
                 item("New worktree", Action::NewWorktree),
                 item("Open worktree...", Action::OpenWorktree),
@@ -24,6 +27,7 @@ impl ClientContextMenuOverlay {
                 ..
             } => vec![
                 item("Rename", Action::Rename),
+                item("Set color", Action::SetColor),
                 item("Close", Action::Close),
                 item("Delete worktree checkout...", Action::RemoveWorktree),
             ],
@@ -33,6 +37,7 @@ impl ClientContextMenuOverlay {
                 ..
             } => vec![
                 item("Rename", Action::Rename),
+                item("Set color", Action::SetColor),
                 item("Close group", Action::Close),
                 item("New worktree", Action::NewWorktree),
                 item("Open worktree...", Action::OpenWorktree),
@@ -41,6 +46,25 @@ impl ClientContextMenuOverlay {
                     Action::ToggleGroup,
                 ),
             ],
+            ClientContextMenuTarget::WorkspaceColor { .. } => {
+                use crate::workspace::WorkspaceColor;
+                let mut items = vec![item("No color", Action::PickColor(None))];
+                items.extend(WorkspaceColor::ALL.iter().map(|color| {
+                    item(
+                        match color {
+                            WorkspaceColor::Mauve => "Mauve",
+                            WorkspaceColor::Red => "Red",
+                            WorkspaceColor::Peach => "Peach",
+                            WorkspaceColor::Yellow => "Yellow",
+                            WorkspaceColor::Green => "Green",
+                            WorkspaceColor::Teal => "Teal",
+                            WorkspaceColor::Blue => "Blue",
+                        },
+                        Action::PickColor(Some(*color)),
+                    )
+                }));
+                items
+            }
             ClientContextMenuTarget::Tab { .. } => vec![
                 item("New tab", Action::NewTab),
                 item("Rename", Action::Rename),
@@ -198,8 +222,32 @@ impl ClientShellState {
             return;
         };
         match menu.target {
+            ClientContextMenuTarget::Workspace { workspace_id, .. }
+                if action == ClientContextMenuAction::SetColor =>
+            {
+                // Replace the workspace menu with the color picker in place.
+                self.overlay = Some(ClientShellOverlay::ContextMenu(ClientContextMenuOverlay {
+                    target: ClientContextMenuTarget::WorkspaceColor { workspace_id },
+                    x: menu.x,
+                    y: menu.y,
+                    highlighted: 0,
+                }));
+            }
             ClientContextMenuTarget::Workspace { workspace_id, .. } => {
                 self.activate_workspace_context_action(workspace_id, action, outcome)
+            }
+            ClientContextMenuTarget::WorkspaceColor { workspace_id } => {
+                if let ClientContextMenuAction::PickColor(color) = action {
+                    self.push_endpoint_method(
+                        crate::api::schema::Method::WorkspaceSetColor(
+                            crate::api::schema::WorkspaceSetColorParams {
+                                workspace_id,
+                                color,
+                            },
+                        ),
+                        outcome,
+                    );
+                }
             }
             ClientContextMenuTarget::Tab {
                 tab_id,

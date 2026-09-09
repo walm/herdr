@@ -75,6 +75,7 @@ pub(super) fn snapshot(
                 marker: state
                     .aggregate_marker(&app.state.terminals)
                     .map(|(marker, _)| marker),
+                color: state.custom_color,
             }
         })
         .collect();
@@ -634,8 +635,14 @@ mod tests {
             ),
         });
 
+        app.state.workspaces[0].set_custom_color(Some(crate::workspace::WorkspaceColor::Teal));
         let after = snapshot(&app, "boot", 2, None, None);
         assert!(after.panes[0].pinned, "pin state must reach the client");
+        assert_eq!(
+            after.workspaces[0].color,
+            Some(crate::workspace::WorkspaceColor::Teal),
+            "workspace color must reach the client"
+        );
         assert_eq!(after.tabs[0].marker.as_deref(), Some("🔨"));
         assert_eq!(after.workspaces[0].marker.as_deref(), Some("🔨"));
     }

@@ -7,9 +7,10 @@ pub(super) fn render_collapsed(
     endpoints: &[ClientShellEndpoint],
     active_endpoint_id: &ClientEndpointId,
     config: &ClientShellConfig,
+    scope_workspace_id: Option<&str>,
     hits: &mut ShellHitMap,
 ) {
-    let rows = agent_rows(endpoints, active_endpoint_id, config);
+    let rows = agent_rows(endpoints, active_endpoint_id, config, scope_workspace_id);
     for (index, row) in rows.into_iter().take(area.height as usize).enumerate() {
         let rect = Rect::new(area.x, area.y + index as u16, area.width, 1);
         if row.agent.focused {
@@ -49,6 +50,7 @@ pub(super) fn render_expanded(
     endpoints: &[ClientShellEndpoint],
     active_endpoint_id: &ClientEndpointId,
     config: &ClientShellConfig,
+    scope_workspace_id: Option<&str>,
     agent_scroll: &mut usize,
     hits: &mut ShellHitMap,
 ) {
@@ -61,7 +63,7 @@ pub(super) fn render_expanded(
     ) {
         return;
     }
-    let rows = agent_rows(endpoints, active_endpoint_id, config);
+    let rows = agent_rows(endpoints, active_endpoint_id, config, scope_workspace_id);
     super::agent_sidebar::render_agent_list(
         buffer,
         area,
@@ -98,6 +100,7 @@ fn agent_rows(
     endpoints: &[ClientShellEndpoint],
     active_endpoint_id: &ClientEndpointId,
     config: &ClientShellConfig,
+    scope_workspace_id: Option<&str>,
 ) -> Vec<EndpointAgentRow> {
     let mut rendered_rows = endpoints
         .iter()
@@ -114,6 +117,13 @@ fn agent_rows(
 
     super::aggregate_navigation::aggregate_agent_rows(endpoints, config.agent_panel_sort)
         .into_iter()
+        .filter(|row| {
+            // "current" scope means the active machine's current workspace only.
+            scope_workspace_id.is_none_or(|workspace_id| {
+                row.endpoint.endpoint_id == active_endpoint_id
+                    && row.agent.workspace_id == workspace_id
+            })
+        })
         .filter_map(|row| {
             let key = (row.endpoint.endpoint_id.clone(), row.agent.pane_id.clone());
             let mut agent = rendered_rows.remove(&key)?;

@@ -59,6 +59,9 @@ impl ClientShellState {
             agent_panel_sort: self
                 .agent_panel_sort_manual
                 .then_some(self.config.agent_panel_sort),
+            agent_panel_scope: self
+                .agent_panel_scope_manual
+                .then_some(self.config.agent_panel_scope),
             collapsed_groups,
             remote_collapsed_groups,
         };
@@ -72,6 +75,7 @@ impl ClientShellState {
         match crate::config::load_live_config() {
             Ok(loaded) => {
                 let agent_panel_sort = self.config.agent_panel_sort;
+                let agent_panel_scope = self.config.agent_panel_scope;
                 let diagnostics = self.config.apply_live_config(
                     &loaded.config,
                     &loaded.diagnostics,
@@ -88,6 +92,9 @@ impl ClientShellState {
                 }
                 if self.agent_panel_sort_manual {
                     self.config.agent_panel_sort = agent_panel_sort;
+                }
+                if self.agent_panel_scope_manual {
+                    self.config.agent_panel_scope = agent_panel_scope;
                 }
                 self.set_local_config_diagnostic(self.config.local_config_diagnostic(&diagnostics));
                 if let Some(snapshot) = self.snapshot.as_deref() {
@@ -122,9 +129,14 @@ impl ClientShellConfig {
             tab_bar_position: config.ui.tab_bar_position,
             hide_tab_bar_when_single_tab: config.ui.hide_tab_bar_when_single_tab,
             tab_markers: config.ui.tab_markers,
+            show_prefix_hint: config.ui.show_prefix_hint,
+            tab_number_prefix: config.ui.tab_number_prefix,
+            tab_agent_status: config.ui.tab_agent_status,
+            workspace_tab_label: config.ui.workspace_tab_label,
             spaces: config.ui.sidebar.spaces.clone(),
             agents: config.ui.sidebar.agents.clone(),
             agent_panel_sort: config.ui.agent_panel_sort,
+            agent_panel_scope: config.ui.agent_panel_scope,
             status_indicators: config.ui.status_indicators,
             sound_enabled: config.ui.sound.enabled,
             toast_delivery: config.ui.toast.delivery,
@@ -325,9 +337,14 @@ impl ClientShellConfig {
                 self.tab_bar_position = ui.tab_bar_position;
                 self.hide_tab_bar_when_single_tab = ui.hide_tab_bar_when_single_tab;
                 self.tab_markers = ui.tab_markers;
+                self.show_prefix_hint = ui.show_prefix_hint;
+                self.tab_number_prefix = ui.tab_number_prefix;
+                self.tab_agent_status = ui.tab_agent_status;
+                self.workspace_tab_label = ui.workspace_tab_label;
                 self.spaces = ui.sidebar.spaces.clone();
                 self.agents = ui.sidebar.agents.clone();
                 self.agent_panel_sort = ui.agent_panel_sort;
+                self.agent_panel_scope = ui.agent_panel_scope;
                 self.status_indicators = ui.status_indicators;
                 self.sound_enabled = ui.sound.enabled;
                 self.toast_delivery = ui.toast.delivery;

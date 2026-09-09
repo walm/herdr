@@ -16,6 +16,7 @@ pub(super) fn run_workspace_command(args: &[String]) -> std::io::Result<i32> {
         "get" => workspace_get(&args[1..]),
         "focus" => workspace_focus(&args[1..]),
         "rename" => workspace_rename(&args[1..]),
+        "set-color" => workspace_set_color(&args[1..]),
         "report-metadata" => workspace_report_metadata(&args[1..]),
         "close" => workspace_close(&args[1..]),
         "help" | "--help" | "-h" => {
@@ -137,6 +138,29 @@ fn workspace_rename(args: &[String]) -> std::io::Result<i32> {
     super::runtime::workspace_rename(WorkspaceRenameParams {
         workspace_id: super::normalize_workspace_id(&args[0]),
         label: args[1..].join(" "),
+    })
+}
+
+fn workspace_set_color(args: &[String]) -> std::io::Result<i32> {
+    let [workspace_id, color] = args else {
+        eprintln!("usage: herdr workspace set-color <workspace_id> <mauve|red|peach|yellow|green|teal|blue|none>");
+        return Ok(2);
+    };
+    let color = if color == "none" {
+        None
+    } else {
+        match crate::workspace::WorkspaceColor::parse(color) {
+            Some(color) => Some(color),
+            None => {
+                eprintln!("unknown color {color}; expected one of mauve, red, peach, yellow, green, teal, blue, or none");
+                return Ok(2);
+            }
+        }
+    };
+
+    super::runtime::workspace_set_color(crate::api::schema::WorkspaceSetColorParams {
+        workspace_id: super::normalize_workspace_id(workspace_id),
+        color,
     })
 }
 
