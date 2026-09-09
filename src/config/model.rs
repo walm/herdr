@@ -101,11 +101,21 @@ pub enum AgentPanelSortConfig {
     Priority,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, Serialize, Default)]
 #[serde(rename_all = "lowercase")]
-enum LegacyAgentPanelScopeConfig {
+pub enum AgentPanelScopeConfig {
     Current,
+    #[default]
     All,
+}
+
+impl AgentPanelScopeConfig {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Current => "current",
+            Self::All => "all",
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, Serialize, Default)]
@@ -995,9 +1005,9 @@ pub struct UiConfig {
     pub window_title: String,
     /// Agent sidebar ordering. Saved values are "spaces" or "priority". Default: "spaces".
     pub agent_panel_sort: AgentPanelSortConfig,
-    /// Retired setting that Herdr wrote before the workspace filter was removed.
-    #[serde(rename = "agent_panel_scope")]
-    _legacy_agent_panel_scope: Option<LegacyAgentPanelScopeConfig>,
+    /// Agent sidebar scope. "current" lists only agents in the current workspace,
+    /// "all" lists agents across every workspace. Default: "all".
+    pub agent_panel_scope: AgentPanelScopeConfig,
     /// Agent status indicator style. Saved values are "dots" or "symbols". Default: "dots".
     pub status_indicators: StatusIndicatorStyle,
     /// Expanded sidebar row composition.
@@ -1230,7 +1240,7 @@ impl Default for UiConfig {
             tab_bar_right_separator: " ".into(),
             window_title: super::window_title::default_window_title(),
             agent_panel_sort: AgentPanelSortConfig::Spaces,
-            _legacy_agent_panel_scope: None,
+            agent_panel_scope: AgentPanelScopeConfig::All,
             status_indicators: StatusIndicatorStyle::Dots,
             sidebar: SidebarConfig::default(),
             accent: "cyan".into(),
@@ -1597,6 +1607,7 @@ prompt_new_tab_name = false
             defaults.ui.workspace_tab_label,
             WorkspaceTabLabelConfig::Auto
         );
+        assert_eq!(defaults.ui.agent_panel_scope, AgentPanelScopeConfig::All);
 
         let toml = r#"
 [ui]
@@ -1604,12 +1615,14 @@ show_prefix_hint = false
 tab_number_prefix = true
 tab_agent_status = true
 workspace_tab_label = "on"
+agent_panel_scope = "current"
 "#;
         let config: Config = toml::from_str(toml).unwrap();
         assert!(!config.ui.show_prefix_hint);
         assert!(config.ui.tab_number_prefix);
         assert!(config.ui.tab_agent_status);
         assert_eq!(config.ui.workspace_tab_label, WorkspaceTabLabelConfig::On);
+        assert_eq!(config.ui.agent_panel_scope, AgentPanelScopeConfig::Current);
         assert!(
             config.collect_diagnostics().is_empty(),
             "restored keys must not be reported as unknown"

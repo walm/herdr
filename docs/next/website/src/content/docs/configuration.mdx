@@ -391,6 +391,7 @@ tab_number_prefix = false
 tab_agent_status = false
 workspace_tab_label = "auto"
 agent_panel_sort = "spaces"
+agent_panel_scope = "all"
 accent = "cyan"
 ```
 
@@ -508,6 +509,8 @@ Set `tab_number_prefix = true` to prefix each named tab in the tab bar with its 
 Set `tab_agent_status = true` to show each tab's aggregate agent status at the end of the tab in the tab bar, using the same indicator style as the sidebar. Only working, blocked, and done tabs get a glyph; quiet tabs stay clean.
 
 `workspace_tab_label` shows the active workspace's name at the right of the tab bar so you can tell which workspace you are in while the sidebar is out of the way. `auto` (default) shows it only when the sidebar is collapsed, `on` always, `off` never. Give a workspace its own color by right-clicking it in the sidebar and choosing "Set color", or with `herdr workspace set-color <workspace> teal`; the label takes that color. Colors persist across restarts.
+
+`agent_panel_scope` controls which agents the sidebar panel lists. `all` (default) shows agents across every workspace and machine. `current` shows only the agents in the current workspace: the highlighted one while you navigate the sidebar, otherwise the focused one. Next/previous agent keys follow the same scope. Click the `all`/`current` toggle in the agents header to switch at runtime; that choice is remembered per client and wins over the config value until you change it again.
 
 ## Notifications
 

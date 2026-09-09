@@ -185,9 +185,13 @@ impl ClientShellState {
             action,
             KeybindAction::PreviousAgent | KeybindAction::NextAgent | KeybindAction::FocusAgent(_)
         ) {
+            let scope = self.agent_scope_workspace();
             let agents = super::aggregate_navigation::online_agent_targets(
                 &self.endpoints,
                 self.config.agent_panel_sort,
+                scope
+                    .as_deref()
+                    .map(|workspace_id| (&self.active_endpoint_id, workspace_id)),
             );
             if agents.is_empty() {
                 return true;

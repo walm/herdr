@@ -132,12 +132,18 @@ pub(super) fn render_collapsed(
             Style::default().fg(palette.surface_dim),
         );
     }
+    let scope_workspace_id = super::agent_sidebar::agent_scope_workspace(
+        config,
+        state.selected_workspace_id,
+        active_endpoint_snapshot(state),
+    );
     super::endpoint_agents::render_collapsed(
         buffer,
         detail_area,
         state.endpoints,
         state.active_endpoint_id,
         config,
+        scope_workspace_id.as_deref(),
         hits,
     );
     hits.sidebar_toggle = if area.is_empty() || workspace_area.width == 0 {
@@ -421,6 +427,11 @@ pub(super) fn render_expanded(
             }),
         );
     }
+    let scope_workspace_id = super::agent_sidebar::agent_scope_workspace(
+        config,
+        state.selected_workspace_id,
+        active_snapshot,
+    );
     super::endpoint_agents::render_expanded(
         buffer,
         detail_area,
@@ -428,6 +439,7 @@ pub(super) fn render_expanded(
         state.endpoints,
         state.active_endpoint_id,
         config,
+        scope_workspace_id.as_deref(),
         state.agent_scroll,
         hits,
     );
@@ -497,4 +509,15 @@ fn render_endpoint_row(
             .add_modifier(Modifier::BOLD),
     );
     put_right_text(buffer, rect, rect.y, &signal, Style::default().fg(color));
+}
+
+/// The active machine's cached snapshot, if any.
+fn active_endpoint_snapshot<'a>(
+    state: &'a ShellRenderState<'_>,
+) -> Option<&'a ClientShellSnapshot> {
+    state
+        .endpoints
+        .iter()
+        .find(|endpoint| &endpoint.endpoint_id == state.active_endpoint_id)
+        .and_then(|endpoint| endpoint.snapshot.as_deref())
 }

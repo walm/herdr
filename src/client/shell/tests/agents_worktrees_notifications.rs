@@ -972,6 +972,109 @@ fn tab_bar_shows_number_prefix_status_glyph_and_workspace_label() {
         .contains("client-shell"));
 }
 
+fn agent(pane_id: &str, workspace_id: &str, name: &str, focused: bool) -> ClientShellAgent {
+    ClientShellAgent {
+        pane_id: pane_id.into(),
+        workspace_id: workspace_id.into(),
+        tab_id: "tab_1".into(),
+        name: Some(name.into()),
+        display_agent: None,
+        agent: None,
+        title: None,
+        terminal_title: None,
+        terminal_title_stripped: None,
+        agent_status: AgentStatus::Idle,
+        state_change_seq: 1,
+        state_labels: Vec::new(),
+        tokens: Vec::new(),
+        focused,
+    }
+}
+
+/// Two workspaces, one agent each, ws_1 focused.
+fn two_workspace_agents_snapshot() -> ClientShellSnapshot {
+    let mut snapshot = snapshot();
+    let mut second = snapshot.workspaces[0].clone();
+    second.workspace_id = "ws_2".into();
+    second.number = 2;
+    second.label = "other".into();
+    second.focused = false;
+    snapshot.workspaces.push(second);
+    snapshot.agents = vec![
+        agent("pane_1", "ws_1", "alpha-agent", true),
+        agent("pane_9", "ws_2", "omega-agent", false),
+    ];
+    snapshot
+}
+
+#[test]
+fn agent_panel_scope_current_lists_only_the_current_workspace() {
+    let mut config = Config::default();
+    config.ui.agent_panel_scope = crate::config::AgentPanelScopeConfig::Current;
+    let mut state = ClientShellState::new(ClientShellConfig::from_config(&config));
+    state.set_snapshot(Box::new(two_workspace_agents_snapshot()));
+    state.set_pane_surface(surface());
+
+    let text = frame_text(&state.compose(106, 24).expect("composed frame"));
+    assert!(text.contains("alpha-agent"), "{text}");
+    assert!(
+        !text.contains("omega-agent"),
+        "agents outside the focused workspace stay hidden: {text}"
+    );
+    assert!(text.contains("current"), "scope toggle label: {text}");
+
+    // Navigating onto the other workspace follows the highlight.
+    state.mode = ClientShellMode::Navigate;
+    state.navigate_workspace_id = Some("ws_2".into());
+    let text = frame_text(&state.compose(106, 24).expect("composed frame"));
+    assert!(text.contains("omega-agent"), "{text}");
+    assert!(!text.contains("alpha-agent"), "{text}");
+    state.mode = ClientShellMode::Terminal;
+
+    // Agent navigation uses the same scope: only ws_1's agent is a target.
+    let targets = crate::client::shell::aggregate_navigation::online_agent_targets(
+        &state.endpoints,
+        state.config.agent_panel_sort,
+        state
+            .agent_scope_workspace()
+            .as_deref()
+            .map(|workspace_id| (&state.active_endpoint_id, workspace_id)),
+    );
+    assert_eq!(
+        targets
+            .iter()
+            .map(|t| t.pane_id.as_str())
+            .collect::<Vec<_>>(),
+        vec!["pane_1"]
+    );
+
+    // Clicking the toggle flips to "all" and remembers it as a manual choice.
+    state.compose(106, 24).expect("composed frame");
+    let toggle = state.hits.agent_scope_toggle;
+    assert!(!toggle.is_empty(), "scope toggle must be clickable");
+    for kind in [
+        MouseEventKind::Down(MouseButton::Left),
+        MouseEventKind::Up(MouseButton::Left),
+    ] {
+        state.handle_raw_events(vec![RawInputEvent::Mouse(crossterm::event::MouseEvent {
+            kind,
+            column: toggle.x,
+            row: toggle.y,
+            modifiers: KeyModifiers::empty(),
+        })]);
+    }
+    assert_eq!(
+        state.config.agent_panel_scope,
+        crate::config::AgentPanelScopeConfig::All
+    );
+    assert!(state.agent_panel_scope_manual);
+    let text = frame_text(&state.compose(106, 24).expect("composed frame"));
+    assert!(
+        text.contains("alpha-agent") && text.contains("omega-agent"),
+        "{text}"
+    );
+}
+
 #[test]
 fn prefix_hint_can_be_hidden() {
     let mut config = Config::default();

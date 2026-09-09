@@ -350,6 +350,10 @@ const DEFAULT_CONFIG: &str = r##"# herdr configuration
 # "workspaces" is accepted as an alias for "spaces".
 # agent_panel_sort = "spaces"
 
+# Which agents the sidebar lists: "all" workspaces, or only the "current" one.
+# Click the all/current toggle in the agents header to switch at runtime.
+# agent_panel_scope = "all"
+
 # Agent status indicators: "dots" preserves the compact color marks; "symbols" uses
 # distinct static glyphs for blocked, working, done, idle, and unknown states.
 # status_indicators = "dots"

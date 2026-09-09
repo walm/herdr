@@ -857,6 +857,9 @@ impl ClientShellState {
                 super::aggregate_navigation::online_agent_targets(
                     &self.endpoints,
                     self.config.agent_panel_sort,
+                    self.agent_scope_workspace()
+                        .as_deref()
+                        .map(|workspace_id| (&self.active_endpoint_id, workspace_id)),
                 )
                 .get(*index)
                 .is_some()
