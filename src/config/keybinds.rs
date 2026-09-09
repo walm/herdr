@@ -342,6 +342,7 @@ pub struct Keybinds {
     pub next_tab: ActionKeybinds,
     pub move_tab_previous: ActionKeybinds,
     pub move_tab_next: ActionKeybinds,
+    pub last_tab: ActionKeybinds,
     pub switch_tab: Vec<IndexedKeybind>,
     pub switch_workspace: Vec<IndexedKeybind>,
     pub close_tab: ActionKeybinds,
@@ -512,6 +513,7 @@ impl Config {
             next_tab: empty_action!(),
             move_tab_previous: empty_action!(),
             move_tab_next: empty_action!(),
+            last_tab: empty_action!(),
             switch_tab: Vec::new(),
             switch_workspace: Vec::new(),
             close_tab: empty_action!(),
@@ -651,6 +653,7 @@ impl Config {
             apply_action!(keybinds.next_tab, next_tab, source);
             apply_action!(keybinds.move_tab_previous, move_tab_previous, source);
             apply_action!(keybinds.move_tab_next, move_tab_next, source);
+            apply_action!(keybinds.last_tab, last_tab, source);
             apply_indexed!(
                 keybinds.switch_tab,
                 switch_tab,
@@ -2178,6 +2181,33 @@ switch_tab = "prefix+?"
         assert!(!diagnostics.iter().any(|diag| {
             diag.contains("kept keys.switch_tab") && diag.contains("disabled keys.help")
         }));
+    }
+
+    #[test]
+    fn last_tab_defaults_to_prefix_a_and_can_be_overridden() {
+        let kb = Config::default().keybinds();
+        assert_eq!(
+            binding_triggers(&kb.last_tab),
+            vec![BindingTrigger::Prefix((
+                KeyCode::Char('a'),
+                KeyModifiers::empty()
+            ))]
+        );
+
+        let config: Config = toml::from_str(
+            r#"
+[keys]
+last_tab = "prefix+y"
+"#,
+        )
+        .unwrap();
+        assert_eq!(
+            binding_triggers(&config.keybinds().last_tab),
+            vec![BindingTrigger::Prefix((
+                KeyCode::Char('y'),
+                KeyModifiers::empty()
+            ))]
+        );
     }
 
     #[test]

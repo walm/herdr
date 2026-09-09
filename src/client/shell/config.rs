@@ -122,6 +122,10 @@ impl ClientShellConfig {
             tab_bar_position: config.ui.tab_bar_position,
             hide_tab_bar_when_single_tab: config.ui.hide_tab_bar_when_single_tab,
             tab_markers: config.ui.tab_markers,
+            show_prefix_hint: config.ui.show_prefix_hint,
+            tab_number_prefix: config.ui.tab_number_prefix,
+            tab_agent_status: config.ui.tab_agent_status,
+            workspace_tab_label: config.ui.workspace_tab_label,
             spaces: config.ui.sidebar.spaces.clone(),
             agents: config.ui.sidebar.agents.clone(),
             agent_panel_sort: config.ui.agent_panel_sort,
@@ -325,6 +329,10 @@ impl ClientShellConfig {
                 self.tab_bar_position = ui.tab_bar_position;
                 self.hide_tab_bar_when_single_tab = ui.hide_tab_bar_when_single_tab;
                 self.tab_markers = ui.tab_markers;
+                self.show_prefix_hint = ui.show_prefix_hint;
+                self.tab_number_prefix = ui.tab_number_prefix;
+                self.tab_agent_status = ui.tab_agent_status;
+                self.workspace_tab_label = ui.workspace_tab_label;
                 self.spaces = ui.sidebar.spaces.clone();
                 self.agents = ui.sidebar.agents.clone();
                 self.agent_panel_sort = ui.agent_panel_sort;

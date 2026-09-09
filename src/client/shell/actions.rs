@@ -156,6 +156,11 @@ impl ClientShellState {
                     self.push_endpoint_method(method, outcome);
                     return;
                 }
+                if action == crate::input::KeybindAction::LastTab {
+                    // No tab history yet: nothing to toggle back to, and the
+                    // outer client has no better answer.
+                    return;
+                }
                 outcome.actions.push(ClientShellAction::Keybind(action));
             }
             crate::input::KeybindMatch::Command(command) => {
@@ -1043,6 +1048,23 @@ impl ClientShellState {
                 Some(Method::TabFocus(TabTarget {
                     tab_id: tabs.get(index)?.tab_id.clone(),
                 }))
+            }
+            KeybindAction::LastTab => {
+                let focused_tab = focused_tab?;
+                let previous = self
+                    .previous_tab_by_workspace
+                    .get(&focused_workspace)
+                    .cloned()?;
+                if previous == focused_tab
+                    || !snapshot
+                        .tabs
+                        .iter()
+                        .any(|tab| tab.tab_id == previous && tab.workspace_id == focused_workspace)
+                {
+                    self.previous_tab_by_workspace.remove(&focused_workspace);
+                    return None;
+                }
+                Some(Method::TabFocus(TabTarget { tab_id: previous }))
             }
             KeybindAction::PreviousTab | KeybindAction::NextTab => {
                 let tabs = snapshot

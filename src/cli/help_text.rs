@@ -197,6 +197,11 @@ const SPECIFIC: &[(&str, &str, &str)] = &[
     // workspace / worktree / tab
     ("workspace rename", "label", "New workspace name"),
     (
+        "workspace set-color",
+        "color",
+        "Accent for the workspace label in the tab bar; \"none\" clears it",
+    ),
+    (
         "workspace report-metadata",
         "source",
         "Identifier for the reporting source",
@@ -337,6 +342,7 @@ const EXAMPLES: &[(&str, &str)] = &[
         "workspace",
         "  herdr workspace list\n  \
          herdr workspace create --cwd ~/src/herdr --label herdr\n  \
+         herdr workspace set-color ws1 teal\n  \
          herdr workspace close ws1",
     ),
     (

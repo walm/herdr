@@ -11,7 +11,7 @@ pub(super) use super::agent_sidebar::{ordered_agent_pane_ids, render_agent_panel
 pub(super) use super::aggregate_navigation::navigator_rows as client_navigator_rows;
 pub(super) use overlays::{render_client_overlay, render_context_menu, render_global_menu};
 pub(super) use sidebar::{render_collapsed_sidebar, render_sidebar, workspace_entries};
-pub(super) use tabs::{render_tab_bar, tab_bar_status_width};
+pub(super) use tabs::{render_tab_bar, tab_bar_status_width, workspace_tab_label};
 
 pub(in crate::client::shell) fn render_sidebar_background(
     buffer: &mut Buffer,
@@ -35,10 +35,16 @@ pub(super) fn render_mode_bar(
     copy_mode: Option<&ClientCopyModeState>,
     endpoint_error: Option<&str>,
     update_available: bool,
+    show_prefix_hint: bool,
     keybinds: &LiveKeybindConfig,
     palette: &Palette,
 ) -> Option<Rect> {
     if (mode == ClientShellMode::Terminal && endpoint_error.is_none()) || pane_area.is_empty() {
+        return None;
+    }
+    // `ui.show_prefix_hint = false` keeps prefix mode silent; other modes and
+    // errors still get their bar.
+    if mode == ClientShellMode::Prefix && !show_prefix_hint && endpoint_error.is_none() {
         return None;
     }
 
@@ -287,11 +293,13 @@ pub(super) fn render_shell(
         }
     }
     if layout.tab_bar.height > 0 {
+        let workspace_label = workspace_tab_label(snapshot, config, state.sidebar_collapsed);
         render_tab_bar(
             buffer,
             layout.tab_bar,
             snapshot,
             config,
+            workspace_label.as_ref(),
             state.tab_scroll,
             state.reveal_focused_tab,
             state.tab_drag_insert_index,

@@ -78,6 +78,10 @@ pub(crate) struct ClientShellConfig {
     pub(super) tab_bar_position: TabBarPositionConfig,
     pub(super) hide_tab_bar_when_single_tab: bool,
     pub(super) tab_markers: bool,
+    pub(super) show_prefix_hint: bool,
+    pub(super) tab_number_prefix: bool,
+    pub(super) tab_agent_status: bool,
+    pub(super) workspace_tab_label: crate::config::WorkspaceTabLabelConfig,
     pub(super) spaces: SpacesSidebarConfig,
     pub(super) agents: crate::config::AgentsSidebarConfig,
     pub(super) agent_panel_sort: crate::config::AgentPanelSortConfig,
@@ -583,6 +587,10 @@ pub(super) enum ClientContextMenuAction {
     ToggleRightClickPassthrough,
     TogglePin,
     ClosePane,
+    /// Open the workspace color picker submenu.
+    SetColor,
+    /// Apply a color from the picker; `None` clears it.
+    PickColor(Option<crate::workspace::WorkspaceColor>),
 }
 
 #[derive(Debug)]
@@ -598,6 +606,8 @@ pub(super) enum ClientContextMenuTarget {
         tab_id: String,
         workspace_id: String,
     },
+    /// The color picker opened from a workspace menu's "Set color".
+    WorkspaceColor { workspace_id: String },
     Pane {
         pane_id: String,
         workspace_id: String,
@@ -954,6 +964,9 @@ pub(crate) struct ClientShellState {
     pub(super) workspace_scroll: usize,
     pub(super) agent_scroll: usize,
     pub(super) tab_scroll: usize,
+    /// Per workspace, the tab that was active before the current one, for the
+    /// `last_tab` toggle. Keyed by workspace id, valued by tab id.
+    pub(super) previous_tab_by_workspace: HashMap<String, String>,
     pub(super) mobile_switcher_scroll: usize,
     pub(super) reveal_focused_workspace: bool,
     pub(super) reveal_mobile_workspace: bool,
@@ -1108,6 +1121,7 @@ impl ClientShellState {
             workspace_scroll: 0,
             agent_scroll: 0,
             tab_scroll: 0,
+            previous_tab_by_workspace: HashMap::new(),
             mobile_switcher_scroll: 0,
             reveal_focused_workspace: true,
             reveal_mobile_workspace: false,
@@ -1329,6 +1343,37 @@ impl ClientShellState {
         self.dismissed_product_announcement = None;
     }
 
+    /// Remember which tab each workspace left, so `last_tab` can toggle back.
+    /// Runs on every snapshot before it replaces the current one.
+    fn record_tab_history(&mut self, next: &ClientShellSnapshot) {
+        let Some(current) = self.snapshot.as_deref() else {
+            return;
+        };
+        if current.boot_id != next.boot_id {
+            self.previous_tab_by_workspace.clear();
+            return;
+        }
+        for workspace in &next.workspaces {
+            let Some(before) = current
+                .workspaces
+                .iter()
+                .find(|candidate| candidate.workspace_id == workspace.workspace_id)
+            else {
+                continue;
+            };
+            if before.active_tab_id != workspace.active_tab_id {
+                self.previous_tab_by_workspace
+                    .insert(workspace.workspace_id.clone(), before.active_tab_id.clone());
+            }
+        }
+        self.previous_tab_by_workspace
+            .retain(|workspace_id, tab_id| {
+                next.tabs
+                    .iter()
+                    .any(|tab| &tab.tab_id == tab_id && &tab.workspace_id == workspace_id)
+            });
+    }
+
     pub(super) fn apply_active_snapshot(&mut self, mut snapshot: Box<ClientShellSnapshot>) {
         snapshot
             .commands
@@ -1436,7 +1481,15 @@ impl ClientShellState {
                             || left.label != right.label
                             || left.zoomed != right.zoomed
                     })
-                || render::tab_bar_status_width(current) != render::tab_bar_status_width(&snapshot)
+                || render::tab_bar_status_width(
+                    current,
+                    render::workspace_tab_label(current, &self.config, self.sidebar_collapsed)
+                        .as_ref(),
+                ) != render::tab_bar_status_width(
+                    &snapshot,
+                    render::workspace_tab_label(&snapshot, &self.config, self.sidebar_collapsed)
+                        .as_ref(),
+                )
         });
         if self
             .snapshot
@@ -1591,6 +1644,7 @@ impl ClientShellState {
                 Some(_) => {}
             }
         }
+        self.record_tab_history(&snapshot);
         self.snapshot = Some(snapshot);
         let pending_surface = self.pending_pane_surface.take();
         if let Some(surface) = pending_surface {

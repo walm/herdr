@@ -174,7 +174,9 @@ pub(crate) fn reserve_workspace_ids(workspaces: &[Workspace]) {
 
 /// A user-chosen accent color for a workspace, drawn from the theme palette so it
 /// stays theme-aware. Resolved to a concrete color via `Palette::workspace_color`.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize, schemars::JsonSchema,
+)]
 #[serde(rename_all = "lowercase")]
 pub enum WorkspaceColor {
     Mauve,
@@ -184,6 +186,38 @@ pub enum WorkspaceColor {
     Green,
     Teal,
     Blue,
+}
+
+impl WorkspaceColor {
+    /// All pickable colors, in display order.
+    pub const ALL: [WorkspaceColor; 7] = [
+        WorkspaceColor::Mauve,
+        WorkspaceColor::Red,
+        WorkspaceColor::Peach,
+        WorkspaceColor::Yellow,
+        WorkspaceColor::Green,
+        WorkspaceColor::Teal,
+        WorkspaceColor::Blue,
+    ];
+
+    pub fn as_str(self) -> &'static str {
+        match self {
+            WorkspaceColor::Mauve => "mauve",
+            WorkspaceColor::Red => "red",
+            WorkspaceColor::Peach => "peach",
+            WorkspaceColor::Yellow => "yellow",
+            WorkspaceColor::Green => "green",
+            WorkspaceColor::Teal => "teal",
+            WorkspaceColor::Blue => "blue",
+        }
+    }
+
+    pub fn parse(name: &str) -> Option<Self> {
+        Self::ALL
+            .iter()
+            .copied()
+            .find(|color| color.as_str() == name)
+    }
 }
 
 /// A named workspace containing tabs.
@@ -1019,6 +1053,10 @@ impl Workspace {
     pub fn public_tab_number_for_pane(&self, pane_id: PaneId) -> Option<usize> {
         let tab_idx = self.find_tab_index_for_pane(pane_id)?;
         self.public_tab_number(tab_idx)
+    }
+
+    pub fn set_custom_color(&mut self, color: Option<WorkspaceColor>) {
+        self.custom_color = color;
     }
 
     pub fn set_custom_name(&mut self, name: String) {

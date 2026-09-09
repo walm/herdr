@@ -217,6 +217,14 @@ fn workspace_command() -> Command {
                 .arg(required("label", "LABEL").num_args(1..)),
         )
         .subcommand(
+            Command::new("set-color")
+                .about("Set or clear the workspace color")
+                .arg(required("workspace_id", "WORKSPACE_ID"))
+                .arg(required("color", "COLOR").value_parser([
+                    "mauve", "red", "peach", "yellow", "green", "teal", "blue", "none",
+                ])),
+        )
+        .subcommand(
             Command::new("report-metadata")
                 .about("Report display-only workspace metadata")
                 .arg(required("workspace_id", "WORKSPACE_ID"))

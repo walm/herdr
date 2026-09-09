@@ -4,11 +4,87 @@ const TAB_SCROLL_BUTTON_WIDTH: u16 = 3;
 const MIN_TAB_STRIP_WIDTH: u16 =
     MIN_TAB_WIDTH + NEW_TAB_WIDTH + TAB_SCROLL_BUTTON_WIDTH.saturating_mul(2);
 
+const MAX_WORKSPACE_LABEL_WIDTH: usize = 24;
+
+/// The active workspace's name for the right end of the tab bar, with its
+/// user-chosen color. `None` when `ui.workspace_tab_label` hides it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct WorkspaceTabLabel {
+    pub(crate) text: String,
+    pub(crate) color: Option<crate::workspace::WorkspaceColor>,
+}
+
+pub(crate) fn workspace_tab_label(
+    snapshot: &ClientShellSnapshot,
+    config: &ClientShellConfig,
+    sidebar_collapsed: bool,
+) -> Option<WorkspaceTabLabel> {
+    use crate::config::WorkspaceTabLabelConfig;
+    let show = match config.workspace_tab_label {
+        WorkspaceTabLabelConfig::Off => false,
+        WorkspaceTabLabelConfig::On => true,
+        WorkspaceTabLabelConfig::Auto => sidebar_collapsed,
+    };
+    if !show {
+        return None;
+    }
+    let workspace = snapshot.workspaces.iter().find(|workspace| {
+        Some(workspace.workspace_id.as_str()) == snapshot.focused_workspace_id.as_deref()
+    })?;
+    let name = crate::ui::truncate_end(&workspace.label, MAX_WORKSPACE_LABEL_WIDTH);
+    Some(WorkspaceTabLabel {
+        text: format!(" {name} "),
+        color: workspace.color,
+    })
+}
+
+/// Only attention states earn a glyph at the tab's trailing edge; quiet tabs
+/// stay clean.
+fn tab_status_glyph(
+    tab: &ClientShellTab,
+    config: &ClientShellConfig,
+) -> Option<(&'static str, ratatui::style::Color)> {
+    use crate::api::schema::AgentStatus;
+    if !config.tab_agent_status {
+        return None;
+    }
+    match tab.agent_status {
+        AgentStatus::Working | AgentStatus::Blocked | AgentStatus::Done => Some((
+            super::status_icon(tab.agent_status, config.status_indicators),
+            super::status_color(tab.agent_status, &config.palette),
+        )),
+        AgentStatus::Idle | AgentStatus::Unknown => None,
+    }
+}
+
+/// Pick black or white text for a solid background, using the WCAG
+/// black-vs-white crossover so pastel accents get dark text.
+fn readable_text_color(bg: ratatui::style::Color, palette: &Palette) -> ratatui::style::Color {
+    let ratatui::style::Color::Rgb(r, g, b) = bg else {
+        return panel_contrast_fg(palette);
+    };
+    fn channel(value: u8) -> f32 {
+        let value = f32::from(value) / 255.0;
+        if value <= 0.03928 {
+            value / 12.92
+        } else {
+            ((value + 0.055) / 1.055).powf(2.4)
+        }
+    }
+    let luminance = 0.2126 * channel(r) + 0.7152 * channel(g) + 0.0722 * channel(b);
+    if luminance > 0.179 {
+        ratatui::style::Color::Black
+    } else {
+        ratatui::style::Color::White
+    }
+}
+
 pub(crate) fn render_tab_bar(
     buffer: &mut Buffer,
     area: Rect,
     snapshot: &ClientShellSnapshot,
     config: &ClientShellConfig,
+    workspace_label: Option<&WorkspaceTabLabel>,
     tab_scroll: &mut usize,
     reveal_focused_tab: &mut bool,
     tab_drag_insert_index: Option<usize>,
@@ -24,11 +100,19 @@ pub(crate) fn render_tab_bar(
     let desired_widths = tabs
         .iter()
         .map(|tab| {
-            let label = tab_label(tab, config.tab_markers);
-            display_width(&label).saturating_add(4).max(MIN_TAB_WIDTH)
+            let label = tab_label(tab, config);
+            let glyph = if tab_status_glyph(tab, config).is_some() {
+                2
+            } else {
+                0
+            };
+            display_width(&label)
+                .saturating_add(4)
+                .saturating_add(glyph)
+                .max(MIN_TAB_WIDTH)
         })
         .collect::<Vec<_>>();
-    let content = tab_bar_content_area(snapshot, area);
+    let content = tab_bar_content_area(snapshot, workspace_label, area);
     let mouse_chrome = config.mouse_capture;
     let new_tab_width = if mouse_chrome { NEW_TAB_WIDTH } else { 0 };
     let desired_total = desired_widths
@@ -92,7 +176,8 @@ pub(crate) fn render_tab_bar(
     let mut first_visible = None;
     let mut last_visible = None;
     for (index, tab) in tabs.iter().enumerate().skip(*tab_scroll) {
-        let name = tab_label(tab, config.tab_markers);
+        let name = tab_label(tab, config);
+        let glyph = tab_status_glyph(tab, config);
         let desired = desired_widths[index];
         let remaining = tab_right.saturating_sub(x);
         let width = desired.min(remaining);
@@ -117,15 +202,28 @@ pub(crate) fn render_tab_bar(
                 .bg(palette.surface0)
                 .add_modifier(Modifier::DIM)
         };
-        let padding = width.saturating_sub(display_width(&name));
+        let glyph_reserve = if glyph.is_some() { 2 } else { 0 };
+        let padding = width.saturating_sub(display_width(&name).saturating_add(glyph_reserve));
         let left = padding / 2;
         let text = format!(
             "{empty:left$}{name}{empty:right_padding$}",
             empty = "",
             left = left as usize,
-            right_padding = padding.saturating_sub(left) as usize,
+            right_padding = padding.saturating_sub(left).saturating_add(glyph_reserve) as usize,
         );
         put_text(buffer, rect.x, rect.y, rect.width, &text, style);
+        if let Some((glyph, color)) = glyph {
+            // Drawn into the trailing padding so the glyph never shifts the
+            // label as agent state changes.
+            let glyph_x = rect
+                .x
+                .saturating_add(left)
+                .saturating_add(display_width(&name))
+                .saturating_add(1);
+            if glyph_x < rect.right() {
+                put_text(buffer, glyph_x, rect.y, 1, glyph, style.fg(color));
+            }
+        }
         hits.tabs.push((rect, tab.tab_id.clone()));
         first_visible.get_or_insert(index);
         last_visible = Some(index);
@@ -223,22 +321,34 @@ pub(crate) fn render_tab_bar(
             );
         }
     }
-    render_tab_bar_status(buffer, area, snapshot, palette);
+    render_tab_bar_status(buffer, area, snapshot, workspace_label, palette);
 }
 
-pub(crate) fn tab_bar_status_width(snapshot: &ClientShellSnapshot) -> u16 {
+/// Width of the right-side strip: configured status entries plus, when shown,
+/// the workspace label that follows them.
+pub(crate) fn tab_bar_status_width(
+    snapshot: &ClientShellSnapshot,
+    workspace_label: Option<&WorkspaceTabLabel>,
+) -> u16 {
     let content = snapshot.tab_bar_right.iter().fold(0u16, |width, segment| {
         width.saturating_add(display_width(&segment.text))
     });
     let separators = snapshot.tab_bar_right.len().saturating_sub(1);
-    content.saturating_add(
+    let status = content.saturating_add(
         display_width(&snapshot.tab_bar_right_separator)
             .saturating_mul(separators.min(u16::MAX as usize) as u16),
-    )
+    );
+    let label = workspace_label.map_or(0, |label| display_width(&label.text));
+    let gap = u16::from(status > 0 && label > 0);
+    status.saturating_add(gap).saturating_add(label)
 }
 
-fn tab_bar_status_area(snapshot: &ClientShellSnapshot, area: Rect) -> Option<Rect> {
-    let width = tab_bar_status_width(snapshot);
+fn tab_bar_status_area(
+    snapshot: &ClientShellSnapshot,
+    workspace_label: Option<&WorkspaceTabLabel>,
+    area: Rect,
+) -> Option<Rect> {
+    let width = tab_bar_status_width(snapshot, workspace_label);
     if width == 0 {
         return None;
     }
@@ -247,8 +357,12 @@ fn tab_bar_status_area(snapshot: &ClientShellSnapshot, area: Rect) -> Option<Rec
         .then(|| Rect::new(area.right().saturating_sub(width), area.y, width, 1))
 }
 
-fn tab_bar_content_area(snapshot: &ClientShellSnapshot, area: Rect) -> Rect {
-    let reserved = tab_bar_status_area(snapshot, area)
+fn tab_bar_content_area(
+    snapshot: &ClientShellSnapshot,
+    workspace_label: Option<&WorkspaceTabLabel>,
+    area: Rect,
+) -> Rect {
+    let reserved = tab_bar_status_area(snapshot, workspace_label, area)
         .map(|status| status.width.saturating_add(1))
         .unwrap_or(0);
     Rect {
@@ -261,11 +375,32 @@ fn render_tab_bar_status(
     buffer: &mut Buffer,
     area: Rect,
     snapshot: &ClientShellSnapshot,
+    workspace_label: Option<&WorkspaceTabLabel>,
     palette: &Palette,
 ) {
-    let Some(status) = tab_bar_status_area(snapshot, area) else {
+    let Some(status) = tab_bar_status_area(snapshot, workspace_label, area) else {
         return;
     };
+    if let Some(label) = workspace_label {
+        // The label sits at the far right, tinted with the workspace color.
+        let width = display_width(&label.text);
+        let bg = label
+            .color
+            .map(|color| palette.workspace_color(color))
+            .unwrap_or(palette.surface0);
+        let x = status.right().saturating_sub(width);
+        put_text(
+            buffer,
+            x,
+            area.y,
+            width,
+            &label.text,
+            Style::default()
+                .fg(readable_text_color(bg, palette))
+                .bg(bg)
+                .add_modifier(Modifier::BOLD),
+        );
+    }
     let separator_width = display_width(&snapshot.tab_bar_right_separator);
     let mut x = status.x;
     for (index, segment) in snapshot.tab_bar_right.iter().enumerate() {
@@ -377,9 +512,14 @@ fn last_visible_tab(start: usize, widths: &[u16], available: u16) -> Option<usiz
     last
 }
 
-fn tab_label(tab: &ClientShellTab, show_markers: bool) -> String {
+fn tab_label(tab: &ClientShellTab, config: &ClientShellConfig) -> String {
     let mut label = tab.label.clone();
-    if show_markers {
+    // Unnamed tabs already read as their number, so only named tabs get a
+    // prefix and "1: 1" never appears.
+    if config.tab_number_prefix && tab.custom_label {
+        label = format!("{}: {label}", tab.number);
+    }
+    if config.tab_markers {
         if let Some(marker) = tab.marker.as_deref().filter(|marker| !marker.is_empty()) {
             label.push(' ');
             label.push_str(marker);

@@ -161,6 +161,8 @@ resize_pane_up = "ctrl+shift+alt+up"
 resize_pane_right = "ctrl+shift+alt+right"
 ```
 
+`last_tab` (default `prefix+a`) switches back to the previously active tab within the current workspace, toggling between the two like `last_pane` does for panes. It is scoped per workspace.
+
 Key strings accept plain keys, modifier combinations such as `ctrl+a`, `shift+n`, `alt+1`, `cmd+k`, and special keys such as `enter`, `tab`, `esc`, `left`, `right`, `up`, and `down`. Named punctuation such as `minus`, `comma`, `ampersand`, `plus`, and `backtick` is also accepted. Plain direct printable keys such as `n` are unsafe because they intercept typing; use `prefix+n` unless you intentionally want a direct binding. The `navigate_workspace_*` and `navigate_pane_*` fields are navigate-mode-only and may use plain keys such as `j` or `k`; they must not use `prefix+`, `esc`, `enter`, `tab`, `shift+tab`, `left`, `right`, or unmodified `1` through `9`. Left and right arrows are permanent aliases for pane-left and pane-right navigation. These navigate-mode shortcuts are independent from general action bindings such as `focus_pane_down = "prefix+j"`; when both use the same key, the navigate-mode shortcut wins while navigate mode is open. Alt, Cmd/Super, and punctuation with modifiers depend on your terminal and tmux settings.
 
 If you have old custom keybindings and want the new defaults, run `herdr config reset-keys`. Herdr backs up `config.toml`, removes `[keys]` and `[[keys.command]]`, and uses built-in v2 defaults after restart or `herdr server reload-config`.
@@ -384,6 +386,10 @@ pane_gaps = true
 show_agent_labels_on_pane_borders = false
 hide_tab_bar_when_single_tab = false
 tab_markers = true
+show_prefix_hint = true
+tab_number_prefix = false
+tab_agent_status = false
+workspace_tab_label = "auto"
 agent_panel_sort = "spaces"
 accent = "cyan"
 ```
@@ -494,6 +500,14 @@ Sidebar row settings affect only the expanded desktop sidebar. Collapsed and mob
 Set `tab_markers = false` to hide agent-reported markers. Agents and scripts can set a short marker (an emoji or icon) on their pane with `herdr pane report-metadata "$HERDR_PANE_ID" --source build --marker "🔨"`, and clear it with `--clear-marker`. The marker appears after the tab label in the tab bar, and as the `marker` token on sidebar workspace rows (in the default row, after the workspace name). When several panes in a tab (or several tabs in a workspace) have markers, the most recently reported one wins. Markers are display-only, are capped at two columns, support `--ttl-ms` to expire on their own, and are cleared on restart. Nothing is shown unless a marker is reported, so this is on by default.
 
 Pinned panes ask before closing. Pin from the pane right-click menu, with `herdr pane pin <pane>`, or with the optional `keys.toggle_pin_pane` binding. Closing a pinned pane, a tab that holds one, or a workspace that holds one shows a confirmation even when `confirm_close = false`; `herdr pane close --force` and `herdr tab close --force` skip it. Pins persist across restarts and list with `herdr pane list --pinned`.
+
+Set `show_prefix_hint = false` to hide the hint bar that appears at the bottom of the screen after you press the prefix key. Prefix mode still works; only the hint is hidden.
+
+Set `tab_number_prefix = true` to prefix each named tab in the tab bar with its position number, for example `1: main`, so the `prefix+1..9` switch keys are easy to read. Unnamed tabs already show their number and are left alone.
+
+Set `tab_agent_status = true` to show each tab's aggregate agent status at the end of the tab in the tab bar, using the same indicator style as the sidebar. Only working, blocked, and done tabs get a glyph; quiet tabs stay clean.
+
+`workspace_tab_label` shows the active workspace's name at the right of the tab bar so you can tell which workspace you are in while the sidebar is out of the way. `auto` (default) shows it only when the sidebar is collapsed, `on` always, `off` never. Give a workspace its own color by right-clicking it in the sidebar and choosing "Set color", or with `herdr workspace set-color <workspace> teal`; the label takes that color. Colors persist across restarts.
 
 ## Notifications
 

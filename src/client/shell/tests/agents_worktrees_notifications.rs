@@ -117,6 +117,7 @@ fn grouped_worktrees_render_parent_branch_and_indented_child() {
         focused: false,
         agent_status: AgentStatus::Idle,
         marker: None,
+        color: None,
     });
     state.set_snapshot(Box::new(snapshot));
     state.set_pane_surface(surface());
@@ -734,6 +735,257 @@ fn agent_sort_toggle_is_client_local_and_persists_per_endpoint() {
     );
     assert!(reloaded.agent_panel_sort_manual);
     std::fs::remove_file(path).expect("remove agent sort preferences");
+}
+
+fn two_tab_snapshot() -> ClientShellSnapshot {
+    let mut snapshot = snapshot();
+    let mut second = snapshot.tabs[0].clone();
+    second.tab_id = "tab_2".into();
+    second.number = 2;
+    second.label = "logs".into();
+    second.custom_label = true;
+    second.focused = false;
+    snapshot.tabs.push(second);
+    snapshot
+}
+
+fn focus_tab(snapshot: &mut ClientShellSnapshot, tab_id: &str) {
+    for tab in &mut snapshot.tabs {
+        tab.focused = tab.tab_id == tab_id;
+    }
+    snapshot.workspaces[0].active_tab_id = tab_id.into();
+    snapshot.focused_tab_id = Some(tab_id.into());
+    snapshot.revision += 1;
+}
+
+fn frame_text(frame: &crate::protocol::FrameData) -> String {
+    frame
+        .cells
+        .chunks(frame.width as usize)
+        .map(|row| {
+            row.iter()
+                .map(|cell| cell.symbol.as_str())
+                .collect::<String>()
+        })
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
+#[test]
+fn last_tab_toggles_between_the_two_most_recent_tabs() {
+    let mut state = ClientShellState::new(ClientShellConfig::from_config(&Config::default()));
+    let mut snapshot = two_tab_snapshot();
+    state.set_snapshot(Box::new(snapshot.clone()));
+
+    // No history yet: the binding is a no-op.
+    let mut first = ClientShellInput::default();
+    state.record_binding(
+        crate::input::KeybindMatch::Action(crate::input::KeybindAction::LastTab),
+        &mut first,
+    );
+    assert!(first.actions.is_empty());
+
+    // The server reports tab_2 focused; tab_1 becomes the "last" tab.
+    focus_tab(&mut snapshot, "tab_2");
+    state.set_snapshot(Box::new(snapshot.clone()));
+    let mut back = ClientShellInput::default();
+    state.record_binding(
+        crate::input::KeybindMatch::Action(crate::input::KeybindAction::LastTab),
+        &mut back,
+    );
+    let [ClientShellAction::Endpoint { request, .. }] = &back.actions[..] else {
+        panic!("last_tab should focus through the endpoint API");
+    };
+    assert!(matches!(
+        &request.method,
+        crate::api::schema::Method::TabFocus(target) if target.tab_id == "tab_1"
+    ));
+
+    // Once the server confirms tab_1, a second press goes back to tab_2.
+    focus_tab(&mut snapshot, "tab_1");
+    state.set_snapshot(Box::new(snapshot.clone()));
+    let mut again = ClientShellInput::default();
+    state.record_binding(
+        crate::input::KeybindMatch::Action(crate::input::KeybindAction::LastTab),
+        &mut again,
+    );
+    let [ClientShellAction::Endpoint { request, .. }] = &again.actions[..] else {
+        panic!("last_tab should toggle back");
+    };
+    assert!(matches!(
+        &request.method,
+        crate::api::schema::Method::TabFocus(target) if target.tab_id == "tab_2"
+    ));
+
+    // A closed previous tab drops out of the history instead of being targeted.
+    snapshot.tabs.retain(|tab| tab.tab_id != "tab_2");
+    snapshot.revision += 1;
+    state.set_snapshot(Box::new(snapshot));
+    let mut gone = ClientShellInput::default();
+    state.record_binding(
+        crate::input::KeybindMatch::Action(crate::input::KeybindAction::LastTab),
+        &mut gone,
+    );
+    assert!(gone.actions.is_empty());
+}
+
+#[test]
+fn a_user_binding_on_prefix_prefix_wins_over_the_literal_prefix() {
+    let config: Config = toml::from_str(
+        r#"
+[keys]
+prefix = "ctrl+a"
+last_tab = "prefix+ctrl+a"
+"#,
+    )
+    .unwrap();
+    let mut state = ClientShellState::new(ClientShellConfig::from_config(&config));
+    let mut snapshot = two_tab_snapshot();
+    state.set_snapshot(Box::new(snapshot.clone()));
+    focus_tab(&mut snapshot, "tab_2");
+    state.set_snapshot(Box::new(snapshot));
+
+    let ctrl_a = crate::input::TerminalKey::new(KeyCode::Char('a'), KeyModifiers::CONTROL);
+    let armed = state.handle_raw_events(vec![RawInputEvent::Key(ctrl_a.clone())]);
+    assert_eq!(state.mode, ClientShellMode::Prefix);
+    assert!(armed.actions.is_empty());
+
+    let second = state.handle_raw_events(vec![RawInputEvent::Key(ctrl_a)]);
+    assert_eq!(state.mode, ClientShellMode::Terminal);
+    let [ClientShellAction::Endpoint { request, .. }] = &second.actions[..] else {
+        panic!(
+            "prefix+prefix bound to last_tab should focus a tab, got {:?}",
+            second.actions.len()
+        );
+    };
+    assert!(matches!(
+        &request.method,
+        crate::api::schema::Method::TabFocus(target) if target.tab_id == "tab_1"
+    ));
+}
+
+#[test]
+fn set_color_opens_a_picker_that_sends_workspace_set_color() {
+    let mut state = ClientShellState::new(ClientShellConfig::from_config(&Config::default()));
+    state.set_snapshot(Box::new(snapshot()));
+
+    state.open_workspace_context_menu("ws_1".into(), 0, 0);
+    let set_color = match state.overlay.as_ref() {
+        Some(ClientShellOverlay::ContextMenu(menu)) => menu
+            .items()
+            .iter()
+            .position(|item| item.action == ClientContextMenuAction::SetColor)
+            .expect("set color item"),
+        _ => panic!("workspace context menu"),
+    };
+    let mut open = ClientShellInput::default();
+    state.activate_context_menu_item(set_color, &mut open);
+    assert!(open.actions.is_empty(), "picking a color happens first");
+    let teal = match state.overlay.as_ref() {
+        Some(ClientShellOverlay::ContextMenu(menu)) => {
+            assert!(matches!(
+                &menu.target,
+                ClientContextMenuTarget::WorkspaceColor { workspace_id } if workspace_id == "ws_1"
+            ));
+            menu.items()
+                .iter()
+                .position(|item| {
+                    item.action
+                        == ClientContextMenuAction::PickColor(Some(
+                            crate::workspace::WorkspaceColor::Teal,
+                        ))
+                })
+                .expect("teal item")
+        }
+        _ => panic!("color picker menu"),
+    };
+
+    let mut pick = ClientShellInput::default();
+    state.activate_context_menu_item(teal, &mut pick);
+    let [ClientShellAction::Endpoint { request, .. }] = &pick.actions[..] else {
+        panic!("color choice should use the endpoint API");
+    };
+    assert!(matches!(
+        &request.method,
+        crate::api::schema::Method::WorkspaceSetColor(params)
+            if params.workspace_id == "ws_1"
+                && params.color == Some(crate::workspace::WorkspaceColor::Teal)
+    ));
+    assert!(state.overlay.is_none());
+}
+
+#[test]
+fn tab_bar_shows_number_prefix_status_glyph_and_workspace_label() {
+    let mut config = Config::default();
+    config.ui.tab_number_prefix = true;
+    config.ui.tab_agent_status = true;
+    config.ui.workspace_tab_label = crate::config::WorkspaceTabLabelConfig::On;
+    let mut state = ClientShellState::new(ClientShellConfig::from_config(&config));
+    let mut snapshot = two_tab_snapshot();
+    snapshot.tabs[1].agent_status = AgentStatus::Blocked;
+    snapshot.workspaces[0].label = "client-shell".into();
+    snapshot.workspaces[0].color = Some(crate::workspace::WorkspaceColor::Teal);
+    state.set_snapshot(Box::new(snapshot));
+    state.set_pane_surface(surface());
+
+    let frame = state.compose(106, 20).expect("composed frame");
+    let text = frame_text(&frame);
+    let tab_row = text.lines().next().unwrap_or_default();
+    assert!(
+        tab_row.contains("2: logs"),
+        "named tab gets a number: {tab_row}"
+    );
+    assert!(
+        !tab_row.contains("1: 1"),
+        "auto-named tab keeps its bare number: {tab_row}"
+    );
+    assert!(
+        tab_row.contains("logs ●") || tab_row.contains("logs  ●"),
+        "blocked tab shows its status glyph: {tab_row}"
+    );
+    assert!(
+        tab_row.trim_end().ends_with("client-shell"),
+        "workspace label sits at the right edge: {tab_row}"
+    );
+
+    // Off hides the label; auto follows the sidebar.
+    state.config.workspace_tab_label = crate::config::WorkspaceTabLabelConfig::Off;
+    let text = frame_text(&state.compose(106, 20).expect("composed frame"));
+    assert!(!text
+        .lines()
+        .next()
+        .unwrap_or_default()
+        .contains("client-shell"));
+    state.config.workspace_tab_label = crate::config::WorkspaceTabLabelConfig::Auto;
+    let text = frame_text(&state.compose(106, 20).expect("composed frame"));
+    assert!(!text
+        .lines()
+        .next()
+        .unwrap_or_default()
+        .contains("client-shell"));
+    state.sidebar_collapsed = true;
+    let text = frame_text(&state.compose(106, 20).expect("composed frame"));
+    assert!(text
+        .lines()
+        .next()
+        .unwrap_or_default()
+        .contains("client-shell"));
+}
+
+#[test]
+fn prefix_hint_can_be_hidden() {
+    let mut config = Config::default();
+    config.ui.show_prefix_hint = false;
+    let mut state = ClientShellState::new(ClientShellConfig::from_config(&config));
+    state.set_snapshot(Box::new(snapshot()));
+    state.set_pane_surface(surface());
+    state.mode = ClientShellMode::Prefix;
+    let text = frame_text(&state.compose(106, 20).expect("composed frame"));
+    assert!(!text.contains("PREFIX"), "hint hidden: {text}");
+
+    state.config.show_prefix_hint = true;
+    let text = frame_text(&state.compose(106, 20).expect("composed frame"));
+    assert!(text.contains("PREFIX"), "hint shown: {text}");
 }
 
 #[test]
