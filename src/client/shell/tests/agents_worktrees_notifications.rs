@@ -1076,6 +1076,80 @@ fn agent_panel_scope_current_lists_only_the_current_workspace() {
 }
 
 #[test]
+fn spinner_style_animates_only_while_an_agent_works() {
+    use crate::config::StatusIndicatorStyle;
+    use std::time::{Duration, Instant};
+
+    let mut config = Config::default();
+    config.ui.status_indicators = StatusIndicatorStyle::Spinner;
+    let mut state = ClientShellState::new(ClientShellConfig::from_config(&config));
+    let mut snapshot = two_workspace_agents_snapshot();
+    state.set_snapshot(Box::new(snapshot.clone()));
+    state.set_pane_surface(surface());
+
+    // Idle agents: no animation, no wakeups beyond the default cadence.
+    let now = Instant::now();
+    assert!(!state.tick_spinner(now));
+    assert!(state.next_spinner_frame_at.is_none());
+    assert_eq!(state.timer_delay(now), Duration::from_millis(100));
+    let idle_glyph =
+        crate::client::shell::status_icon(AgentStatus::Working, state.config.indicators());
+
+    // A working agent arms the timer; the frame advances once the interval passes.
+    snapshot.agents[0].agent_status = AgentStatus::Working;
+    state.set_snapshot(Box::new(snapshot.clone()));
+    assert!(!state.tick_spinner(now), "first tick only schedules");
+    assert!(state.next_spinner_frame_at.is_some());
+    assert!(state.timer_delay(now) <= crate::client::shell::SPINNER_FRAME_INTERVAL);
+    assert!(
+        !state.tick_spinner(now + Duration::from_millis(10)),
+        "not due yet"
+    );
+    let later = now + crate::client::shell::SPINNER_FRAME_INTERVAL;
+    assert!(state.tick_spinner(later), "frame due: repaint");
+    assert_eq!(state.config.spinner_frame, 1);
+    let next_glyph =
+        crate::client::shell::status_icon(AgentStatus::Working, state.config.indicators());
+    assert_ne!(
+        idle_glyph, next_glyph,
+        "working glyph changes between frames"
+    );
+    let text = frame_text(&state.compose(106, 24).expect("composed frame"));
+    assert!(
+        text.contains(next_glyph),
+        "sidebar shows the current frame: {text}"
+    );
+
+    // Other states keep the static symbols under the spinner style.
+    let indicators = state.config.indicators();
+    assert_eq!(
+        crate::client::shell::status_icon(AgentStatus::Blocked, indicators),
+        "×"
+    );
+    assert_eq!(
+        crate::client::shell::status_icon(AgentStatus::Done, indicators),
+        "✓"
+    );
+    assert_eq!(
+        crate::client::shell::status_icon(AgentStatus::Idle, indicators),
+        "○"
+    );
+
+    // Agents going quiet disarms the timer.
+    snapshot.agents[0].agent_status = AgentStatus::Idle;
+    state.set_snapshot(Box::new(snapshot.clone()));
+    assert!(!state.tick_spinner(later + Duration::from_secs(1)));
+    assert!(state.next_spinner_frame_at.is_none());
+
+    // The static styles never animate, even with a working agent.
+    snapshot.agents[0].agent_status = AgentStatus::Working;
+    state.set_snapshot(Box::new(snapshot));
+    state.config.status_indicators = StatusIndicatorStyle::Dots;
+    assert!(!state.tick_spinner(later + Duration::from_secs(2)));
+    assert!(state.next_spinner_frame_at.is_none());
+}
+
+#[test]
 fn prefix_hint_can_be_hidden() {
     let mut config = Config::default();
     config.ui.show_prefix_hint = false;

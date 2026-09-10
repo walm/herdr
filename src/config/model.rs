@@ -124,6 +124,9 @@ pub enum StatusIndicatorStyle {
     #[default]
     Dots,
     Symbols,
+    /// Distinct symbols, with an animated spinner while an agent works. The
+    /// animation is client-local and only runs while a working agent is shown.
+    Spinner,
 }
 
 impl StatusIndicatorStyle {
@@ -131,6 +134,7 @@ impl StatusIndicatorStyle {
         match self {
             Self::Dots => "dots",
             Self::Symbols => "symbols",
+            Self::Spinner => "spinner",
         }
     }
 }
@@ -1494,6 +1498,16 @@ status_indicators = "symbols"
         )
         .unwrap();
         assert_eq!(config.ui.status_indicators, StatusIndicatorStyle::Symbols);
+
+        let config: Config = toml::from_str(
+            r#"
+[ui]
+status_indicators = "spinner"
+"#,
+        )
+        .unwrap();
+        assert_eq!(config.ui.status_indicators, StatusIndicatorStyle::Spinner);
+        assert_eq!(StatusIndicatorStyle::Spinner.as_str(), "spinner");
     }
 
     #[test]

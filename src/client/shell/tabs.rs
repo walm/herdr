@@ -50,7 +50,7 @@ fn tab_status_glyph(
     }
     match tab.agent_status {
         AgentStatus::Working | AgentStatus::Blocked | AgentStatus::Done => Some((
-            super::status_icon(tab.agent_status, config.status_indicators),
+            super::status_icon(tab.agent_status, config.indicators()),
             super::status_color(tab.agent_status, &config.palette),
         )),
         AgentStatus::Idle | AgentStatus::Unknown => None,
