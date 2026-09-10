@@ -99,8 +99,9 @@ pub(crate) fn render_tab_bar(
         .collect::<Vec<_>>();
     let desired_widths = tabs
         .iter()
-        .map(|tab| {
-            let label = tab_label(tab, config);
+        .enumerate()
+        .map(|(position, tab)| {
+            let label = tab_label(tab, position + 1, config);
             let glyph = if tab_status_glyph(tab, config).is_some() {
                 2
             } else {
@@ -176,7 +177,7 @@ pub(crate) fn render_tab_bar(
     let mut first_visible = None;
     let mut last_visible = None;
     for (index, tab) in tabs.iter().enumerate().skip(*tab_scroll) {
-        let name = tab_label(tab, config);
+        let name = tab_label(tab, index + 1, config);
         let glyph = tab_status_glyph(tab, config);
         let desired = desired_widths[index];
         let remaining = tab_right.saturating_sub(x);
@@ -512,12 +513,15 @@ fn last_visible_tab(start: usize, widths: &[u16], available: u16) -> Option<usiz
     last
 }
 
-fn tab_label(tab: &ClientShellTab, config: &ClientShellConfig) -> String {
+/// `position` is the tab's 1-based place in the bar, which is what
+/// `prefix+1..9` switches by. It is not `tab.number`: that is the creation id
+/// behind the public tab id and stops matching once tabs are reordered.
+fn tab_label(tab: &ClientShellTab, position: usize, config: &ClientShellConfig) -> String {
     let mut label = tab.label.clone();
     // Unnamed tabs already read as their number, so only named tabs get a
     // prefix and "1: 1" never appears.
     if config.tab_number_prefix && tab.custom_label {
-        label = format!("{}: {label}", tab.number);
+        label = format!("{position}: {label}");
     }
     if config.tab_markers {
         if let Some(marker) = tab.marker.as_deref().filter(|marker| !marker.is_empty()) {
