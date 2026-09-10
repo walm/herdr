@@ -923,6 +923,9 @@ fn tab_bar_shows_number_prefix_status_glyph_and_workspace_label() {
     let mut state = ClientShellState::new(ClientShellConfig::from_config(&config));
     let mut snapshot = two_tab_snapshot();
     snapshot.tabs[1].agent_status = AgentStatus::Blocked;
+    // Creation ids drift from bar positions once tabs are reordered or closed;
+    // the prefix must follow the rendered position.
+    snapshot.tabs[1].number = 7;
     snapshot.workspaces[0].label = "client-shell".into();
     snapshot.workspaces[0].color = Some(crate::workspace::WorkspaceColor::Teal);
     state.set_snapshot(Box::new(snapshot));
@@ -933,8 +936,9 @@ fn tab_bar_shows_number_prefix_status_glyph_and_workspace_label() {
     let tab_row = text.lines().next().unwrap_or_default();
     assert!(
         tab_row.contains("2: logs"),
-        "named tab gets a number: {tab_row}"
+        "named tab is numbered by its position, not its creation id: {tab_row}"
     );
+    assert!(!tab_row.contains("7: logs"), "{tab_row}");
     assert!(
         !tab_row.contains("1: 1"),
         "auto-named tab keeps its bare number: {tab_row}"
