@@ -1169,6 +1169,98 @@ fn prefix_hint_can_be_hidden() {
     assert!(text.contains("PREFIX"), "hint shown: {text}");
 }
 
+/// Every request the shell can emit must be advertised by our own server,
+/// or the client refuses it as unsupported. This drives each shell surface
+/// that sends a request against the real advertised list.
+#[test]
+fn every_shell_request_is_advertised_by_this_server() {
+    let advertised = crate::server::client_commands::supported_client_shell_method_names()
+        .iter()
+        .map(|name| (*name).to_owned())
+        .collect::<Vec<_>>();
+
+    let mut state = ClientShellState::new(ClientShellConfig::from_config(&Config::default()));
+    state.set_snapshot(Box::new(two_tab_snapshot()));
+    state.set_endpoint_methods(Some(advertised));
+
+    let mut emitted = Vec::new();
+    let mut check = |state: &mut ClientShellState, what: &str, outcome: ClientShellInput| {
+        assert!(
+            state.visible_endpoint_notice.is_none(),
+            "{what} was refused as unsupported: {:?}",
+            state.visible_endpoint_notice.as_ref().map(|n| &n.body)
+        );
+        for action in outcome.actions {
+            if let ClientShellAction::Endpoint { request, .. } = action {
+                emitted.push(crate::api::api_method_name(&request.method).to_owned());
+            }
+        }
+    };
+
+    // Keybind-driven requests.
+    for action in [
+        crate::input::KeybindAction::TogglePinPane,
+        crate::input::KeybindAction::ClosePane,
+        crate::input::KeybindAction::CloseTab,
+        crate::input::KeybindAction::NewTab,
+        crate::input::KeybindAction::Zoom,
+        crate::input::KeybindAction::SplitVertical,
+        crate::input::KeybindAction::NextTab,
+    ] {
+        let mut outcome = ClientShellInput::default();
+        state.record_binding(crate::input::KeybindMatch::Action(action), &mut outcome);
+        check(&mut state, &format!("{action:?}"), outcome);
+    }
+
+    // Every pane and workspace context menu item that sends a request.
+    state.open_pane_context_menu("pane_1".into(), 0, 0);
+    let pane_items = match state.overlay.as_ref() {
+        Some(ClientShellOverlay::ContextMenu(menu)) => menu.items().len(),
+        _ => panic!("pane menu"),
+    };
+    for index in 0..pane_items {
+        state.open_pane_context_menu("pane_1".into(), 0, 0);
+        let label = match state.overlay.as_ref() {
+            Some(ClientShellOverlay::ContextMenu(menu)) => menu.items()[index].label,
+            _ => unreachable!(),
+        };
+        let mut outcome = ClientShellInput::default();
+        state.activate_context_menu_item(index, &mut outcome);
+        check(&mut state, label, outcome);
+        state.overlay = None;
+    }
+    state.open_workspace_context_menu("ws_1".into(), 0, 0);
+    let ws_items = match state.overlay.as_ref() {
+        Some(ClientShellOverlay::ContextMenu(menu)) => menu.items().len(),
+        _ => panic!("workspace menu"),
+    };
+    for index in 0..ws_items {
+        state.open_workspace_context_menu("ws_1".into(), 0, 0);
+        let (label, action) = match state.overlay.as_ref() {
+            Some(ClientShellOverlay::ContextMenu(menu)) => {
+                (menu.items()[index].label, menu.items()[index].action)
+            }
+            _ => unreachable!(),
+        };
+        let mut outcome = ClientShellInput::default();
+        state.activate_context_menu_item(index, &mut outcome);
+        check(&mut state, label, outcome);
+        if action == ClientContextMenuAction::SetColor {
+            // The picker replaced the menu; pick the first color too.
+            let mut outcome = ClientShellInput::default();
+            state.activate_context_menu_item(1, &mut outcome);
+            check(&mut state, "color picker", outcome);
+        }
+        state.overlay = None;
+    }
+
+    assert!(
+        emitted.iter().any(|name| name == "pane.set_pinned"),
+        "pin toggle must reach the server: {emitted:?}"
+    );
+    assert!(emitted.iter().any(|name| name == "workspace.set_color"));
+}
+
 #[test]
 fn pinned_pane_close_asks_then_retries_with_force() {
     let mut snapshot = snapshot();
